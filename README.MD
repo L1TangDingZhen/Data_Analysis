@@ -2,6 +2,27 @@
 
 This project is a web application for analyzing and converting data types in datasets, with a focus on intelligent type inference and complex data handling.
 
+
+## Getting Started
+
+### Prerequisites
+- Docker
+- Docker Compose
+
+### Installation and Running
+
+```bash
+# Clone the repository
+git clone https://github.com/L1TangDingZhen/Data_Analysis
+
+
+# Start the application using Docker Compose
+docker-compose up --build
+
+
+```
+
+
 ## Key Features
 
 ### 1. Pandas Data Type Inference and Conversion
@@ -202,25 +223,5 @@ The project includes comprehensive test coverage:
 
 
 
-
-
-
-
-
-## Getting Started
-
-### Prerequisites
-- Docker
-- Docker Compose
-
-### Installation and Running
-
-```bash
-# Clone the repository
-git clone https://github.com/L1TangDingZhen/Data_Analysis
-
-
-# Start the application using Docker Compose
-docker-compose up --build
 
 
