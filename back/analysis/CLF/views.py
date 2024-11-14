@@ -11,9 +11,11 @@ from .utils import (
     generate_file_id,
     save_dataframe,
     get_dataframe,
-    generate_preview_data,  # 添加新的导入
+    generate_preview_data,
     get_column_sample,
-    optimize_dataframe
+    optimize_dataframe,
+    is_complex_data,
+    SpacyModelCache  # 添加新的导入
 )
 from django.http import FileResponse
 import io
@@ -29,6 +31,7 @@ class AnalyzeFileView(APIView):
 
     def post(self, request):
         try:
+            logger.info("Received file analysis request")
             file = request.FILES.get('file')
             if not file:
                 return Response(
@@ -49,51 +52,64 @@ class AnalyzeFileView(APIView):
                     df = pd.read_csv(io.StringIO(file.read().decode('utf-8')))
                 else:
                     df = pd.read_excel(file)
+                    
+                logger.info(f"Successfully read file with shape {df.shape}")
             except Exception as e:
+                logger.error(f"Error reading file: {str(e)}")
                 return Response(
                     {'error': f'Error reading file: {str(e)}'}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            print(df)
-
-            # 应用类型推断
+            # 应用类型推断（现在包含了模型分析）
+            logger.info("Starting data type inference")
             df = optimize_dataframe(df)
-
             df = infer_and_convert_data_types(df)
+            logger.info("Completed data type inference")
 
             # 准备响应数据
-            types = {column: str(df[column].dtype) for column in df.columns}
-            samples = {column: get_column_sample(df, column) for column in df.columns}
+            types = {}
+            samples = {}
+            inference_info = {}  # 新增：存储推断信息
+            
             for column in df.columns:
-                types[column] = str(df[column].dtype)
-                # 获取第一个非空值作为样本
                 try:
-                    non_null_values = df[column].dropna()
-                    if not non_null_values.empty:
-                        value = non_null_values.iloc[0]
-                        if pd.isna(value):
-                            samples[column] = "No data available"
-                        elif isinstance(value, (np.datetime64, pd.Timestamp)):
-                            samples[column] = value.strftime('%d/%m/%Y')  # 使用澳洲日期格式
-                        elif isinstance(value, (np.floating, float)):
-                            if np.isnan(value):
-                                samples[column] = "No data available"
-                            else:
-                                samples[column] = f"{float(value):.2f}" if value % 1 != 0 else str(int(value))
-                        elif isinstance(value, (np.integer, int)):
-                            samples[column] = str(int(value))
-                        elif isinstance(value, bool):
-                            samples[column] = str(int(value))  # 或者使用 'Yes'/'No'
+                    # 获取数据类型
+                    types[column] = str(df[column].dtype)
+                    
+                    # 获取样本值
+                    samples[column] = get_column_sample(df, column)
+                    
+                    # 获取非空值用于复杂数据分析
+                    non_null_values = df[column].dropna().tolist()
+                    if len(non_null_values) > 0:
+                        # 检查是否为复杂数据
+                        is_complex = is_complex_data(non_null_values, column)
+                        if is_complex:
+                            # 获取模型分析结果
+                            inferred_type, confidence = SpacyModelCache.analyze_complex_data(
+                                non_null_values, column
+                            )
+                            inference_info[column] = {
+                                'is_complex': True,
+                                'model_inference': inferred_type,
+                                'confidence': float(confidence),
+                                'used_model': confidence > 0.5
+                            }
                         else:
-                            # 对于字符串值，去除首尾空格
-                            str_value = str(value).strip()
-                            samples[column] = str_value if str_value else "No data available"
-                    else:
-                        samples[column] = "No data available"
+                            inference_info[column] = {
+                                'is_complex': False,
+                                'used_model': False
+                            }
+                            
                 except Exception as e:
-                    print(f"Error processing sample for column {column}: {str(e)}")
-                    samples[column] = "No data available"
+                    logger.error(f"Error processing column {column}: {str(e)}")
+                    types[column] = 'object'
+                    samples[column] = "Error in processing"
+                    inference_info[column] = {
+                        'is_complex': False,
+                        'error': str(e)
+                    }
 
             # 生成文件ID并保存DataFrame
             file_id = generate_file_id()
@@ -105,19 +121,20 @@ class AnalyzeFileView(APIView):
                 'rows': len(df),
                 'columns': len(df.columns),
                 'preview_data': generate_preview_data(df),
-                'file_id': file_id
+                'file_id': file_id,
+                'inference_info': inference_info  # 新增：包含推断信息
             }
 
-            print(response_data)
-
+            logger.info("Successfully prepared response data")
             return Response(response_data)
 
         except Exception as e:
-            print(f"Error processing file: {str(e)}")
+            logger.error(f"Error in file analysis: {str(e)}")
             return Response(
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
 
 class UpdateTypeView(APIView):
     parser_classes = (JSONParser,)
@@ -276,30 +293,33 @@ class UpdateTypeView(APIView):
 
 
 class ExportDataView(APIView):
-    """导出处理后的数据"""
     def get(self, request, file_id):
         try:
             logger.info(f"Starting data export for file_id: {file_id}")
             df = get_dataframe(file_id)
             
-            # 将DataFrame转换为CSV
-            buffer = io.StringIO()
-            df.to_csv(buffer, index=False)
+            # 创建一个字节缓冲区
+            buffer = io.BytesIO()
+            # 将DataFrame写入缓冲区，编码为utf-8
+            df.to_csv(buffer, index=False, encoding='utf-8')
+            # 将缓冲区指针移到开始
             buffer.seek(0)
             
             logger.info("Successfully exported data")
-            return FileResponse(
-                buffer, 
+            response = FileResponse(
+                buffer,
                 as_attachment=True,
                 filename='processed_data.csv'
             )
+            return response
         except Exception as e:
             logger.error(f"Error exporting data: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
+        
+        
 class StatisticsView(APIView):
     """生成数据统计信息"""
     def get(self, request, file_id):

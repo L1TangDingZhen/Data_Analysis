@@ -535,21 +535,54 @@ const FileAnalyzer = () => {
 
 
         {analysis && (
-              <div className="mt-4">
-                <button 
-                  onClick={handleExport}
-                  className="bg-blue-500 text-white px-4 py-2 rounded"
-                >
-                  Export Processed Data
-                </button>
-                <button 
-                  onClick={fetchStatistics}
-                  className="ml-2 bg-green-500 text-white px-4 py-2 rounded"
-                >
-                  Show Statistics
-                </button>
-              </div>
-            )}
+          <div style={{
+            marginTop: '40px',  // 增加上边距，原来是 mt-4
+            paddingBottom: '20px'  // 可选：添加底部内边距
+          }}>
+            <button 
+              onClick={handleExport}
+              style={{
+                background: 'linear-gradient(to right, #4F46E5, #6366F1)',
+                color: 'white',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                fontSize: '14px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+              }}
+            >
+              <svg 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2"
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export Processed Data
+            </button>
+          </div>
+        )}
 
 
         {statistics && (
@@ -609,13 +642,35 @@ const FileAnalyzer = () => {
         {/* 添加数据预览部分 */}
         {previewData && (
           <div style={styles.previewContainer}>
-            <h3 style={styles.previewTitle}>Data Preview</h3>
+            <h3 style={styles.previewTitle}>
+              Data Preview 
+              <span style={{
+                fontSize: '12px',
+                color: '#666',
+                marginLeft: '10px',
+                fontWeight: 'normal',
+              }}>
+                (Showing first 5 rows)
+              </span>
+            </h3>
             <div style={{ overflowX: 'auto' }}>
               <table style={styles.previewTable}>
                 <thead>
                   <tr>
                     {Object.keys(previewData[0] || {}).map((header) => (
-                      <th key={header} style={styles.previewTh}>{header}</th>
+                      <th key={header} style={styles.previewTh}>
+                        <div>{header}</div>
+                        {analysis && analysis.types && (
+                          <div style={{
+                            fontSize: '11px',
+                            color: '#666',
+                            fontWeight: 'normal',
+                            marginTop: '4px'
+                          }}>
+                            {getDisplayType(analysis.types[header])}
+                          </div>
+                        )}
+                      </th>
                     ))}
                   </tr>
                 </thead>

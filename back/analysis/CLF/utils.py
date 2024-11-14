@@ -7,12 +7,179 @@ import numpy as np
 import re
 import logging
 from typing import Dict, List, Any
+import spacy
+from typing import Optional, Dict, Any, List, Tuple
+
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class SpacyModelCache:
+    _instance = None
+    _model = None
+
+    @classmethod
+    def get_model(cls) -> spacy.language.Language:
+        """获取或加载spaCy模型的单例实例"""
+        if cls._model is None:
+            try:
+                cls._model = spacy.load('en_core_web_md')
+                logger.info("Successfully loaded spaCy model")
+            except Exception as e:
+                logger.error(f"Error loading spaCy model: {str(e)}")
+                raise
+        return cls._model
+
+    @classmethod
+    def analyze_complex_data(cls, 
+                           values: List[Any], 
+                           column_name: str) -> Tuple[str, float]:
+        """
+        分析复杂数据并推断类型
+        
+        Args:
+            values: 要分析的数据列表
+            column_name: 列名
+            
+        Returns:
+            Tuple[str, float]: (推断的类型, 置信度)
+        """
+        try:
+            model = cls.get_model()
+            predictions = []
+            confidence_scores = []
+            
+            # 取前10个非空值进行分析
+            sample_values = [str(v) for v in values[:10] if pd.notna(v)]
+            
+            for value in sample_values:
+                doc = model(value)
+                
+                # 获取实体类型
+                if doc.ents:
+                    ent = doc.ents[0]
+                    predictions.append(cls._map_entity_to_type(ent.label_))
+                    confidence_scores.append(ent._.trf_score if hasattr(ent._, 'trf_score') else 0.5)
+                else:
+                    # 使用词性标注作为后备
+                    pos_type = cls._get_type_from_pos(doc)
+                    if pos_type:
+                        predictions.append(pos_type)
+                        confidence_scores.append(0.3)  # 较低的置信度
+            
+            if predictions:
+                # 获取最常见的预测类型
+                most_common = max(set(predictions), key=predictions.count)
+                confidence = sum(c for p, c in zip(predictions, confidence_scores) 
+                               if p == most_common) / len(predictions)
+                return most_common, confidence
+            
+            return 'text', 0.0  # 默认返回文本类型
+            
+        except Exception as e:
+            logger.warning(f"Error in complex data analysis: {str(e)}")
+            return 'text', 0.0
+            
+    @staticmethod
+    def _map_entity_to_type(ent_label: str) -> str:
+        """将spaCy实体类型映射到数据类型"""
+        type_mapping = {
+            'DATE': 'datetime',
+            'TIME': 'datetime',
+            'CARDINAL': 'number',
+            'MONEY': 'number',
+            'PERCENT': 'number',
+            'QUANTITY': 'number',
+            'ORDINAL': 'number'
+        }
+        return type_mapping.get(ent_label, 'text')
+        
+    @staticmethod
+    def _get_type_from_pos(doc: spacy.tokens.Doc) -> Optional[str]:
+        """从词性标注推断类型"""
+        # 获取主要词性
+        main_pos = doc[0].pos_
+        
+        if main_pos in ['NUM']:
+            return 'number'
+        elif main_pos in ['PROPN', 'NOUN']:
+            return 'category'
+            
+        return None
+
+# utils.py
+def is_complex_data(values: List[Any], column_name: str) -> bool:
+    """
+    判断是否为复杂数据
+    
+    Args:
+        values: 要检查的数据列表
+        column_name: 列名
+        
+    Returns:
+        bool: 是否为复杂数据
+    """
+    try:
+        # 获取非空值
+        clean_values = [v for v in values if pd.notna(v)]
+        if not clean_values:
+            return False
+            
+        # 检查是否存在混合类型
+        value_types = set()
+        for value in clean_values[:10]:  # 只检查前10个值
+            # 如果是pandas的Timestamp类型
+            if isinstance(value, pd.Timestamp):
+                value_types.add('date')
+            # 如果是数字类型
+            elif isinstance(value, (int, float)):
+                value_types.add('number')
+            elif isinstance(value, str):
+                # 如果是字符串，检查它是否可以转换为其他类型
+                # 尝试转换为数字
+                try:
+                    float(value)
+                    value_types.add('number')
+                    continue
+                except ValueError:
+                    pass
+                
+                # 尝试转换为日期
+                try:
+                    pd.to_datetime(value)
+                    value_types.add('date')
+                    continue
+                except:
+                    pass
+                
+                # 检查是否是货币格式 (例如: $1,234.56)
+                if re.match(r'^\$?\d{1,3}(,\d{3})*(\.\d+)?$', value):
+                    value_types.add('currency')
+                    continue
+                    
+                # 检查是否是百分比格式
+                if re.match(r'^\d+(\.\d+)?%$', value):
+                    value_types.add('percentage')
+                    continue
+                
+                # 其他情况认为是文本
+                value_types.add('text')
+        
+        # 如果存在多种类型，或者包含特殊类型（货币、百分比），认为是复杂数据
+        special_types = {'currency', 'percentage'}
+        return len(value_types) > 1 or bool(value_types.intersection(special_types))
+            
+    except Exception as e:
+        logger.warning(f"Error checking complex data: {str(e)}")
+        return False
+
+
+
+
 
 def optimize_dataframe(df):
     """优化DataFrame内存使用"""
@@ -92,6 +259,8 @@ def generate_preview_data(df):
             else:
                 row_dict[col] = str(value).strip()
         preview_data.append(row_dict)
+        # print("!!!!")
+        # print(preview_data)
     return preview_data
 
 # utils.py
@@ -267,86 +436,110 @@ def clean_special_values(df: pd.DataFrame) -> pd.DataFrame:
         logger.error(f"Error in clean_special_values: {str(e)}")
         raise
 
+# utils.py 中修改 infer_and_convert_data_types 函数
+
 def infer_and_convert_data_types(df):
     """增强的数据类型推断函数"""
-
+    # 首先清理特殊值
     df = clean_special_values(df)
-
-
+    
     for column in df.columns:
-        # 获取非空值
-        non_null_values = df[column].dropna()
-        if len(non_null_values) == 0:
-            df[column] = df[column].astype(str)
-            continue
-
-        # 检查列名是否暗示了数据类型
-        col_lower = column.lower()
-        
-        # 名称相关的列通常是字符串
-        if any(name in col_lower for name in ['name', 'title', 'label', 'id']):
-            df[column] = df[column].astype(str)
-            continue
-            
-        # 日期相关的列
-        if any(date in col_lower for date in ['date', 'time', 'year', 'month', 'day']):
-            try:
-                df[column] = pd.to_datetime(df[column], format='%d/%m/%Y', errors='coerce')
-                continue
-            except:
-                pass
-
-        # 检查是否为成绩（grade）
-        if 'grade' in col_lower:
-            # 检查是否所有值都是单个字母或有限的分类值
-            unique_values = non_null_values.unique()
-            if len(unique_values) <= 5 and all(len(str(x).strip()) <= 2 for x in unique_values):
-                df[column] = pd.Categorical(df[column])
-                continue
-            else:
+        try:
+            # 获取非空值
+            non_null_values = df[column].dropna().tolist()
+            if len(non_null_values) == 0:
                 df[column] = df[column].astype(str)
                 continue
 
-        # 检查是否为布尔值
-        if ('is_' in col_lower or 
-            all(str(x).lower() in ['true', 'false', '1', '0', 'yes', 'no'] 
-                for x in df[column].dropna())):
-            try:
-                bool_map = {
-                    'true': True, 'false': False,
-                    '1': True, '0': False,
-                    'yes': True, 'no': False,
-                    1: True, 0: False
-                }
-                df[column] = df[column].map(bool_map)
-                continue
-            except:
-                pass
-
-        # 尝试转换为数值类型
-        if all(str(x).replace('.', '').isdigit() or str(x).lower() in ['nan', 'not available', 'n/a', ''] 
-               for x in non_null_values):
-            try:
-                if non_null_values.astype(str).str.contains('\.').any():
-                    df[column] = pd.to_numeric(df[column], errors='coerce')
+            # 检查是否为复杂数据
+            if is_complex_data(non_null_values, column):
+                logger.info(f"Complex data detected in column {column}, using spaCy model")
+                inferred_type, confidence = SpacyModelCache.analyze_complex_data(
+                    non_null_values, column
+                )
+                
+                if confidence > 0.5:  # 只在置信度足够高时使用模型推断结果
+                    logger.info(f"Using model inference for {column}: {inferred_type} (confidence: {confidence:.2f})")
+                    try:
+                        if inferred_type == 'datetime':
+                            df[column] = pd.to_datetime(df[column], errors='coerce')
+                        elif inferred_type == 'number':
+                            df[column] = pd.to_numeric(df[column], errors='coerce')
+                        elif inferred_type == 'category':
+                            df[column] = pd.Categorical(df[column])
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Failed to convert {column} using model inference: {str(e)}")
                 else:
-                    df[column] = pd.to_numeric(df[column], errors='coerce', downcast='integer')
+                    logger.info(f"Low confidence ({confidence:.2f}) for {column}, falling back to rule-based inference")
+
+            # 以下是原有的规则基础推断逻辑
+            col_lower = column.lower()
+            
+            # 名称相关的列通常是字符串
+            if any(name in col_lower for name in ['name', 'title', 'label', 'id']):
+                df[column] = df[column].astype(str)
                 continue
+                
+            # 日期相关的列
+            if any(date in col_lower for date in ['date', 'time', 'year', 'month', 'day']):
+                try:
+                    df[column] = pd.to_datetime(df[column], format='%d/%m/%Y', errors='coerce')
+                    continue
+                except:
+                    pass
+
+            # Grade列处理
+            if 'grade' in col_lower:
+                unique_values = pd.Series(non_null_values).unique()
+                if len(unique_values) <= 5 and all(len(str(x).strip()) <= 2 for x in unique_values):
+                    df[column] = pd.Categorical(df[column])
+                    continue
+                else:
+                    df[column] = df[column].astype(str)
+                    continue
+
+            # 布尔值检查
+            if ('is_' in col_lower or 
+                all(str(x).lower() in ['true', 'false', '1', '0', 'yes', 'no'] 
+                    for x in non_null_values)):
+                try:
+                    bool_map = {
+                        'true': True, 'false': False,
+                        '1': True, '0': False,
+                        'yes': True, 'no': False,
+                        1: True, 0: False
+                    }
+                    df[column] = df[column].map(bool_map)
+                    continue
+                except:
+                    pass
+
+            # 数值类型检查
+            try:
+                if all(str(x).replace('.', '').isdigit() or str(x).lower() in ['nan', 'not available', 'n/a', ''] 
+                       for x in non_null_values):
+                    if any('.' in str(x) for x in non_null_values):
+                        df[column] = pd.to_numeric(df[column], errors='coerce')
+                    else:
+                        df[column] = pd.to_numeric(df[column], errors='coerce', downcast='integer')
+                    continue
             except:
                 pass
 
-        # 检查是否应该为分类型（对于其他列）
-        unique_ratio = len(non_null_values.unique()) / len(non_null_values)
-        if unique_ratio < 0.5:  # 如果唯一值比例小于50%
-            # 额外检查：确保唯一值的数量不太大
-            if len(non_null_values.unique()) <= 10:  # 假设分类值不应超过10个
+            # 分类类型检查
+            unique_ratio = len(pd.Series(non_null_values).unique()) / len(non_null_values)
+            if unique_ratio < 0.5 and len(pd.Series(non_null_values).unique()) <= 10:
                 df[column] = pd.Categorical(df[column])
                 continue
 
-        # 默认保持为字符串类型
-        df[column] = df[column].astype(str)
+            # 默认为字符串类型
+            df[column] = df[column].astype(str)
+
+        except Exception as e:
+            logger.error(f"Error processing column {column}: {str(e)}")
+            df[column] = df[column].astype(str)  # 发生错误时默认转为字符串类型
 
     return df
-
 
 
