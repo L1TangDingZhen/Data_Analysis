@@ -72,8 +72,6 @@ This project is a web application for analyzing and converting data types in dat
 # Clone the repository
 git clone https://github.com/L1TangDingZhen/Data_Analysis
 
-# Navigate to project directory
-cd [project-directory]
 
 # Start the application using Docker Compose
 docker-compose up --build
