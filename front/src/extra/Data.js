@@ -229,7 +229,7 @@ const getDisplayType = (type) => {
 };
 
 const formatSampleValue = (value) => {
-  // 处理明确的空值情况
+  // handle null values explicitly
   if (value === null || 
       value === undefined || 
       value === 'nan' || 
@@ -239,29 +239,34 @@ const formatSampleValue = (value) => {
     return 'No data available';
   }
 
-  // 处理数字格式
+  // deal with numbers
   if (!isNaN(value) && value !== '') {
     const num = parseFloat(value);
     // 检查是否为整数
+    // integer check
     if (Number.isInteger(num)) {
       return num.toString();
     }
     // 如果是小数，保留两位小数
+    // if it's a decimal, round it to 2 decimal places
     return Number(num.toFixed(2)).toString();
   }
 
   // 处理布尔值
+  // handle boolean values
   if (value === 'true' || value === 'false') {
     return value;
   }
 
-  // 处理日期格式
+  // 处理日期格式\
+  // handle date format
   const dateValue = new Date(value);
   if (!isNaN(dateValue) && value.includes('-')) {
     return dateValue.toLocaleDateString();
   }
 
   // 对于其他所有情况，返回字符串值，并确保去除首尾空格
+  // for all other cases, return the string value and ensure leading/trailing spaces are removed
   const strValue = String(value).trim();
   return strValue || 'No data available';
 };
@@ -346,7 +351,7 @@ const FileAnalyzer = () => {
       
       const data = await response.json();
       setAnalysis(data);
-      setPreviewData(data.preview_data); // 假设后端返回了 preview_data
+      setPreviewData(data.preview_data); // 假设后端返回了 preview_data // assume backend returns preview_data
     } catch (err) {
       console.error('Upload error:', err);
       setError(err.message || 'Failed to analyze file');
@@ -383,6 +388,7 @@ const FileAnalyzer = () => {
       setPreviewData(updatedData.preview_data);
       
       // 更新分析数据中的类型和样本值
+      // update the type and sample value in the analysis data
       setAnalysis(prev => ({
         ...prev,
         types: {
@@ -399,16 +405,12 @@ const FileAnalyzer = () => {
       console.error('Type update error:', err);
       setError('Failed to update column type: ' + err.message);
       // 恢复原来的类型
+      // revert back to the original type
       setModifiedColumns({
         ...modifiedColumns,
         [column]: analysis.types[column]
       });
     }
-
-  
-
-
-
 };
 
   return (
@@ -536,8 +538,8 @@ const FileAnalyzer = () => {
 
         {analysis && (
           <div style={{
-            marginTop: '40px',  // 增加上边距，原来是 mt-4
-            paddingBottom: '20px'  // 可选：添加底部内边距
+            marginTop: '40px',
+            paddingBottom: '20px'  
           }}>
             <button 
               onClick={handleExport}
@@ -588,7 +590,7 @@ const FileAnalyzer = () => {
         {statistics && (
           <div className="mt-4 p-4 bg-white rounded shadow">
             <h3 className="text-lg font-semibold">Data Statistics</h3>
-            {/* 显示统计信息的具体内容 */}
+            {/* */}
             {statistics.numeric_columns && (
               <div>
                 <h4>Numeric Columns</h4>
@@ -639,7 +641,7 @@ const FileAnalyzer = () => {
           </div>
         )}
 
-        {/* 添加数据预览部分 */}
+        {/* preview section */}
         {previewData && (
           <div style={styles.previewContainer}>
             <h3 style={styles.previewTitle}>

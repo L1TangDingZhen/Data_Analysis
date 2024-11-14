@@ -27,6 +27,6 @@ urlpatterns = [
 
     path('export/<str:file_id>/', ExportDataView.as_view(), name='export_data'),
 
-    path('statistics/<str:file_id>/', StatisticsView.as_view(), name='get_statistics'),
+    # path('statistics/<str:file_id>/', StatisticsView.as_view(), name='get_statistics'),
 
 ]

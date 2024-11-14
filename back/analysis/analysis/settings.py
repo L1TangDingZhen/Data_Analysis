@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-046%$jmfcm0g=q$g3_jy++b+w@-i53a6lf%orl=*3cb=%y5+9d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-CORS_ALLOW_ALL_ORIGINS = True  # 仅在开发环境使用
+CORS_ALLOW_ALL_ORIGINS = True  # develop environment
 
 # ALLOWED_HOSTS = []
 
@@ -45,7 +45,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # 添加到最顶部
+    'corsheaders.middleware.CorsMiddleware',  # top 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -144,6 +144,6 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
-        'TIMEOUT': 3600,  # 1小时
+        'TIMEOUT': 3600,  # 1 hour file cache
     }
 }

@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.parsers import MultiPartParser, JSONParser
 import pandas as pd
 import numpy as np
-import json
+# import json
 import io
 from .utils import (
     infer_and_convert_data_types,
@@ -15,7 +15,7 @@ from .utils import (
     get_column_sample,
     optimize_dataframe,
     is_complex_data,
-    SpacyModelCache  # 添加新的导入
+    SpacyModelCache
 )
 from django.http import FileResponse
 import io
@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 
-# views.py
 class AnalyzeFileView(APIView):
     parser_classes = (MultiPartParser,)
 
@@ -39,7 +38,7 @@ class AnalyzeFileView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 检查文件类型
+            # file check for csv and excel
             if not file.name.endswith(('.csv', '.xlsx')):
                 return Response(
                     {'error': 'Invalid file type. Please upload CSV or Excel file'}, 
@@ -47,7 +46,7 @@ class AnalyzeFileView(APIView):
                 )
 
             try:
-                # 读取文件
+                # read file
                 if file.name.endswith('.csv'):
                     df = pd.read_csv(io.StringIO(file.read().decode('utf-8')))
                 else:
@@ -61,32 +60,31 @@ class AnalyzeFileView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 应用类型推断（现在包含了模型分析）
+            # data type inference
             logger.info("Starting data type inference")
             df = optimize_dataframe(df)
             df = infer_and_convert_data_types(df)
             logger.info("Completed data type inference")
 
-            # 准备响应数据
+            # prepare response data
             types = {}
             samples = {}
-            inference_info = {}  # 新增：存储推断信息
+            inference_info = {}  #store inference information
             
             for column in df.columns:
                 try:
-                    # 获取数据类型
+                    # get data type
                     types[column] = str(df[column].dtype)
                     
-                    # 获取样本值
+                    # first 5 non-null values (sample values)
                     samples[column] = get_column_sample(df, column)
                     
-                    # 获取非空值用于复杂数据分析
                     non_null_values = df[column].dropna().tolist()
                     if len(non_null_values) > 0:
-                        # 检查是否为复杂数据
+                        # check if column is complex data
                         is_complex = is_complex_data(non_null_values, column)
                         if is_complex:
-                            # 获取模型分析结果
+                            # receive the model inference and confidence
                             inferred_type, confidence = SpacyModelCache.analyze_complex_data(
                                 non_null_values, column
                             )
@@ -111,7 +109,7 @@ class AnalyzeFileView(APIView):
                         'error': str(e)
                     }
 
-            # 生成文件ID并保存DataFrame
+            # unique file id for each file
             file_id = generate_file_id()
             save_dataframe(file_id, df)
 
@@ -122,7 +120,7 @@ class AnalyzeFileView(APIView):
                 'columns': len(df.columns),
                 'preview_data': generate_preview_data(df),
                 'file_id': file_id,
-                'inference_info': inference_info  # 新增：包含推断信息
+                'inference_info': inference_info
             }
 
             logger.info("Successfully prepared response data")
@@ -136,6 +134,7 @@ class AnalyzeFileView(APIView):
             )
         
 
+# user can update the data type of a column
 class UpdateTypeView(APIView):
     parser_classes = (JSONParser,)
 
@@ -151,31 +150,34 @@ class UpdateTypeView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 获取保存的DataFrame
+            # get the saved DataFrame
             df = get_dataframe(file_id)
             
             print(df)
 
-            # 转换列类型
+            # transfer the specific column type
             try:
+                # number type
                 if new_type == 'number':
                     df[column] = pd.to_numeric(df[column], errors='coerce')
+
+                # datetime type
                 elif new_type == 'datetime':
-                    # 如果当前是时间戳格式（大数字）
+                    # complexe date format
                     if df[column].dtype in ['int64', 'float64']:
-                        # 将纳秒时间戳转换为日期时间
+                        # ignore seconds and nanoseconds
                         df[column] = pd.to_datetime(df[column], unit='ns')
                     else:
-                        # 尝试检测日期格式
+                        # check the date format
                         sample_dates = df[column].dropna().iloc[:5].tolist()
                         date_formats = [
-                        '%d/%m/%Y',     # 31/12/2023 (澳洲格式)
+                        '%d/%m/%Y',     # 31/12/2023
                         '%d/%m/%y',     # 31/12/23
                         '%d-%m-%Y',     # 31-12-2023
                         '%d.%m.%Y',     # 31.12.2023
                     ]
 
-                        # 检测最合适的日期格式
+                        # the best date format
                         best_format = None
                         max_success = 0
                         
@@ -196,12 +198,13 @@ class UpdateTypeView(APIView):
                                 continue
 
                         if best_format:
-                            # 使用检测到的最佳格式转换
+                            # use the best format to convert
                             df[column] = pd.to_datetime(df[column], format=best_format, errors='coerce')
                         else:
-                            # 如果没有找到合适的格式，使用通用解析
+                            # use the general format to convert
                             df[column] = pd.to_datetime(df[column], errors='coerce')
 
+                # boolean type
                 elif new_type == 'boolean':
                     bool_map = {
                         'True': True, 'False': False,
@@ -222,10 +225,10 @@ class UpdateTypeView(APIView):
                 else:  # text
                     df[column] = df[column].astype(str)
 
-                # 更新保存的DataFrame
+                # save the updated DataFrame
                 save_dataframe(file_id, df)
 
-                # 准备预览数据
+                # prepare preview data
                 preview_data = []
                 for _, row in df.head(5).iterrows():
                     row_dict = {}
@@ -234,7 +237,7 @@ class UpdateTypeView(APIView):
                         if pd.isna(value):
                             row_dict[col] = "No data available"
                         elif isinstance(value, (np.datetime64, pd.Timestamp)):
-                            # 使用澳洲日期格式
+                            # australia date format
                             row_dict[col] = value.strftime('%d/%m/%Y')
                         elif isinstance(value, (np.floating, float)):
                             if np.isnan(value):
@@ -245,10 +248,11 @@ class UpdateTypeView(APIView):
                             row_dict[col] = str(value)
                     preview_data.append(row_dict)
 
-                    print(preview_data)
+                    # debug using print
+                    # print(preview_data)
 
 
-                # 准备示例值
+                # get the sample value
                 sample_value = None
                 non_null_values = df[column].dropna()
                 if not non_null_values.empty:
@@ -260,7 +264,7 @@ class UpdateTypeView(APIView):
                     elif isinstance(first_value, (np.integer, int)):
                         sample_value = str(int(first_value))
                     elif isinstance(first_value, (np.datetime64, pd.Timestamp)):
-                        sample_value = first_value.strftime('%m/%d/%Y')  # 使用固定的输出格式
+                        sample_value = first_value.strftime('%m/%d/%Y')  # day/month/year
                     else:
                         sample_value = str(first_value).strip()
                 else:
@@ -298,11 +302,11 @@ class ExportDataView(APIView):
             logger.info(f"Starting data export for file_id: {file_id}")
             df = get_dataframe(file_id)
             
-            # 创建一个字节缓冲区
+            # create a byte buffer
             buffer = io.BytesIO()
-            # 将DataFrame写入缓冲区，编码为utf-8
+            # dataframe in utr-8
             df.to_csv(buffer, index=False, encoding='utf-8')
-            # 将缓冲区指针移到开始
+            # move the buffer pointer to the start
             buffer.seek(0)
             
             logger.info("Successfully exported data")
@@ -319,64 +323,65 @@ class ExportDataView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        
-class StatisticsView(APIView):
-    """生成数据统计信息"""
-    def get(self, request, file_id):
-        try:
-            logger.info(f"Generating statistics for file_id: {file_id}")
-            df = get_dataframe(file_id)
+
+# # future statistics
+# class StatisticsView(APIView):
+#     # generate statistics
+#     def get(self, request, file_id):
+#         try:
+#             logger.info(f"Generating statistics for file_id: {file_id}")
+#             df = get_dataframe(file_id)
             
-            # 生成统计信息时添加错误处理
-            stats = {
-                'numeric_columns': {},
-                'categorical_columns': {},
-                'datetime_columns': {}
-            }
+#             # error handling when generating statistics
+#             stats = {
+#                 'numeric_columns': {},
+#                 'categorical_columns': {},
+#                 'datetime_columns': {}
+#             }
             
-            try:
-                # 数值列统计
-                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-                for col in numeric_cols:
-                    stats['numeric_columns'][col] = {
-                        'mean': float(df[col].mean()),  # 确保可JSON序列化
-                        'median': float(df[col].median()),
-                        'std': float(df[col].std()),
-                        'min': float(df[col].min()),
-                        'max': float(df[col].max())
-                    }
+#             try:
+#                 # numeric column statistics
+#                 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+#                 for col in numeric_cols:
+#                     stats['numeric_columns'][col] = {
+#                         'mean': float(df[col].mean()),  # json 
+#                         'median': float(df[col].median()),
+#                         'std': float(df[col].std()),
+#                         'min': float(df[col].min()),
+#                         'max': float(df[col].max())
+#                     }
                 
-                # 分类列统计
-                cat_cols = df.select_dtypes(include=['category', 'object']).columns
-                for col in cat_cols:
-                    value_counts = df[col].value_counts()
-                    stats['categorical_columns'][col] = {
-                        'value_counts': {str(k): int(v) for k, v in value_counts.items()},  # 确保键和值都是可序列化的
-                        'unique_count': int(df[col].nunique())
-                    }
+#                 # categorical column statistics
+#                 cat_cols = df.select_dtypes(include=['category', 'object']).columns
+#                 for col in cat_cols:
+#                     value_counts = df[col].value_counts()
+#                     stats['categorical_columns'][col] = {
+#                         'value_counts': {str(k): int(v) for k, v in value_counts.items()}, 
+#                         'unique_count': int(df[col].nunique())
+#                     }
                 
-                # 日期列统计
-                date_cols = df.select_dtypes(include=['datetime64']).columns
-                for col in date_cols:
-                    stats['datetime_columns'][col] = {
-                        'min_date': df[col].min().strftime('%d/%m/%Y'),
-                        'max_date': df[col].max().strftime('%d/%m/%Y'),
-                        'date_range': int((df[col].max() - df[col].min()).days)
-                    }
+#                 # date column statistics
+#                 date_cols = df.select_dtypes(include=['datetime64']).columns
+#                 for col in date_cols:
+#                     stats['datetime_columns'][col] = {
+#                         'min_date': df[col].min().strftime('%d/%m/%Y'),
+#                         'max_date': df[col].max().strftime('%d/%m/%Y'),
+#                         'date_range': int((df[col].max() - df[col].min()).days)
+#                     }
                 
-                logger.info("Successfully generated statistics")
-                return Response(stats)
+#                 logger.info("Successfully generated statistics")
+#                 return Response(stats)
                 
-            except Exception as e:
-                logger.error(f"Error calculating statistics: {str(e)}")
-                return Response(
-                    {'error': f'Error calculating statistics: {str(e)}'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+#             except Exception as e:
+#                 logger.error(f"Error calculating statistics: {str(e)}")
+#                 return Response(
+#                     {'error': f'Error calculating statistics: {str(e)}'},
+#                     status=status.HTTP_400_BAD_REQUEST
+#                 )
                 
-        except Exception as e:
-            logger.error(f"Error in statistics generation: {str(e)}")
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+#         except Exception as e:
+#             logger.error(f"Error in statistics generation: {str(e)}")
+#             return Response(
+#                 {'error': str(e)},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )

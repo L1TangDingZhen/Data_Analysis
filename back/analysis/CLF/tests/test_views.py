@@ -7,17 +7,17 @@ import io
 
 
 class BaseTestCase(TestCase):
-    """基础测试类"""
+    # bascic test
     def setUp(self):
         self.client = Client()
         self.setup_test_file()
 
     def setup_test_file(self):
-        # 创建基本测试文件
+        # create basic test file
         csv_data = """Name,Grade,Score,Birthdate,Is_Student
-Alice,A,90,1/1/1990,1
-Bob,B,75,2/2/1991,0
-Charlie,A,85,3/3/1992,1"""
+            Alice,A,90,1/1/1990,1
+            Bob,B,75,2/2/1991,0
+            Charlie,A,85,3/3/1992,1"""
         
         self.test_file = SimpleUploadedFile(
             "test.csv",
@@ -28,19 +28,18 @@ Charlie,A,85,3/3/1992,1"""
 
 
 class FileAnalysisViewTests(TestCase):
-    """测试文件分析视图的测试类"""
-
+    # analysis view test
     def setUp(self):
-        """设置测试环境"""
+        # create client
         self.client = Client()
         
-        # 创建测试CSV文件内容
+        # create test csv file content
         csv_data = """Name,Grade,Score,Birthdate,Is_Student
-Alice,A,90,1/1/1990,1
-Bob,B,75,2/2/1991,0
-Charlie,A,85,3/3/1992,1"""
+            Alice,A,90,1/1/1990,1
+            Bob,B,75,2/2/1991,0
+            Charlie,A,85,3/3/1992,1"""
         
-        # 创建测试文件
+        # create test file
         self.test_file = SimpleUploadedFile(
             "test.csv",
             csv_data.encode('utf-8'),
@@ -48,27 +47,27 @@ Charlie,A,85,3/3/1992,1"""
         )
 
     def test_file_upload(self):
-        """测试文件上传功能"""
-        # 发送POST请求
+        # file upload test
+        # send post request
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
             format='multipart'
         )
         
-        # 检查响应
+        # check response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         
-        # 验证返回的数据结构
+        # check data structure
         self.assertIn('types', data)
         self.assertIn('samples', data)
         self.assertIn('preview_data', data)
         self.assertIn('file_id', data)
 
     def test_update_type(self):
-        """测试类型更新功能"""
-        # 首先上传文件
+        # update type test
+        # upload file first
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
@@ -76,7 +75,7 @@ Charlie,A,85,3/3/1992,1"""
         )
         file_id = response.json()['file_id']
         
-        # 测试更新类型
+        # test update type
         update_response = self.client.post(
             reverse('update_type'),
             json.dumps({
@@ -95,16 +94,16 @@ Charlie,A,85,3/3/1992,1"""
 
 class ExportViewTests(TestCase):
     def setUp(self):
-        """设置测试环境"""
+        # create test environment
         self.client = Client()
         
-        # 创建测试CSV文件内容
+        # create test csv file content
         csv_data = """Name,Grade,Score,Birthdate,Is_Student
-Alice,A,90,1/1/1990,1
-Bob,B,75,2/2/1991,0
-Charlie,A,85,3/3/1992,1"""
-        
-        # 创建测试文件
+            Alice,A,90,1/1/1990,1
+            Bob,B,75,2/2/1991,0
+            Charlie,A,85,3/3/1992,1"""
+                    
+        # create test file
         self.test_file = SimpleUploadedFile(
             "test.csv",
             csv_data.encode('utf-8'),
@@ -112,15 +111,14 @@ Charlie,A,85,3/3/1992,1"""
         )
 
     def test_export_data(self):
-        # 首先上传文件
+        # upload file first
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
             format='multipart'
         )
         file_id = response.json()['file_id']
-        
-        # 测试导出
+        # test export
         export_response = self.client.get(
             reverse('export_data', kwargs={'file_id': file_id})
         )
@@ -129,16 +127,16 @@ Charlie,A,85,3/3/1992,1"""
 
 class StatisticsViewTests(TestCase):
     def setUp(self):
-        """设置测试环境"""
+        # create test environment
         self.client = Client()
         
-        # 创建测试CSV文件内容
+        # create test csv file content
         csv_data = """Name,Grade,Score,Birthdate,Is_Student
-Alice,A,90,1/1/1990,1
-Bob,B,75,2/2/1991,0
-Charlie,A,85,3/3/1992,1"""
+            Alice,A,90,1/1/1990,1
+            Bob,B,75,2/2/1991,0
+            Charlie,A,85,3/3/1992,1"""
         
-        # 创建测试文件
+        # create test file
         self.test_file = SimpleUploadedFile(
             "test.csv",
             csv_data.encode('utf-8'),
@@ -146,7 +144,7 @@ Charlie,A,85,3/3/1992,1"""
         )
 
     def test_statistics_generation(self):
-        # 上传文件
+        # upload file
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
@@ -154,14 +152,14 @@ Charlie,A,85,3/3/1992,1"""
         )
         file_id = response.json()['file_id']
         
-        # 测试统计信息生成
+        # test statistics generation
         stats_response = self.client.get(
             reverse('get_statistics', kwargs={'file_id': file_id})
         )
         self.assertEqual(stats_response.status_code, 200)
         data = stats_response.json()
         
-        # 验证返回的统计信息结构
+        # check data structure
         self.assertIn('numeric_columns', data)
         self.assertIn('categorical_columns', data)
         self.assertIn('datetime_columns', data)
@@ -169,15 +167,15 @@ Charlie,A,85,3/3/1992,1"""
 
 
 class ComplexDataAnalysisTests(TestCase):
-    """测试复杂数据分析功能"""
+    # complex data analysis test
     def setUp(self):
         self.client = Client()
         
-        # 修复CSV格式，确保每行字段数一致
+        # fix csv format to ensure consistent number of fields per row
         csv_data = """Name,Mixed_Column,Date_Column,Currency,Percentage
-    Alice,1234.56,2024-01-01,$1000,50%
-    Bob,ABC123,2024/01/02,$2000,75%
-    Charlie,Test123,2024-01-03,$3000,25%"""
+            Alice,1234.56,2024-01-01,$1000,50%
+            Bob,ABC123,2024/01/02,$2000,75%
+            Charlie,Test123,2024-01-03,$3000,25%"""
         
         self.test_file = SimpleUploadedFile(
             "complex_test.csv",
@@ -186,7 +184,7 @@ class ComplexDataAnalysisTests(TestCase):
         )
 
     def test_complex_data_detection(self):
-        """测试复杂数据检测功能"""
+        # complex data detection test
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
@@ -196,19 +194,19 @@ class ComplexDataAnalysisTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         
-        # 验证inference_info是否存在
+        # check if inference_info exists
         self.assertIn('inference_info', data)
         
-        # 验证Mixed_Column是否被检测为复杂数据
+        # check if Mixed_Column is detected as complex data
         self.assertTrue(
             data['inference_info']['Mixed_Column']['is_complex']
         )
         
-        # 验证模型是否参与了分析
+        # check if model was involved in analysis
         self.assertIn('used_model', data['inference_info']['Mixed_Column'])
 
     def test_spacy_model_integration(self):
-        """测试spaCy模型集成"""
+        # spacy model integration test
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
@@ -217,7 +215,7 @@ class ComplexDataAnalysisTests(TestCase):
         
         data = response.json()
         
-        # 验证Currency列是否正确识别
+        # check if Currency column is correctly identified
         self.assertIn('Currency', data['inference_info'])
         if data['inference_info']['Currency']['is_complex']:
             self.assertGreater(
@@ -226,16 +224,16 @@ class ComplexDataAnalysisTests(TestCase):
             )
 
 class DataTypeConversionTests(TestCase):
-    """测试数据类型转换功能"""
+    # data type conversion test
     
     def setUp(self):
         self.client = Client()
         
-        # 创建测试数据
+        # create test data
         csv_data = """Text,Number,Date,Mixed
-Regular text,123,2024-01-01,123.45
-More text,456,Jan 1 2024,$1,234.56
-Final text,789,01/01/2024,ABC123"""
+            Regular text,123,2024-01-01,123.45
+            More text,456,Jan 1 2024,$1,234.56
+            Final text,789,01/01/2024,ABC123"""
         
         self.test_file = SimpleUploadedFile(
             "conversion_test.csv",
@@ -244,7 +242,7 @@ Final text,789,01/01/2024,ABC123"""
         )
 
     def test_type_inference_accuracy(self):
-        """测试类型推断准确性"""
+        # type inference accuracy test
         response = self.client.post(
             reverse('analyze_file'),
             {'file': self.test_file},
@@ -253,20 +251,19 @@ Final text,789,01/01/2024,ABC123"""
         
         data = response.json()
         
-        # 验证基本类型推断
-        self.assertEqual(data['types']['Text'], 'object')  # 应该是文本类型
-        self.assertIn(data['types']['Number'], ['int64', 'int32'])  # 应该是整数类型
+        # check basic type inference
+        self.assertEqual(data['types']['Text'], 'object')   # should be object type
+        self.assertIn(data['types']['Number'], ['int64', 'int32']) # should be integer type
         
-        # 验证混合数据列
+        # check mixed data column
         self.assertTrue(data['inference_info']['Mixed']['is_complex'])
 
     def test_error_handling(self):
-        """测试错误处理"""
-        # 创建包含错误数据的CSV
+        # error handling test
         csv_data = """Number,Date
-invalid,2024-01-01
-123,invalid_date
-456,2024-01-01"""
+            invalid,2024-01-01
+            123,invalid_date
+            456,2024-01-01"""
         
         error_file = SimpleUploadedFile(
             "error_test.csv",
@@ -280,10 +277,10 @@ invalid,2024-01-01
             format='multipart'
         )
         
-        self.assertEqual(response.status_code, 200)  # 应该仍然成功处理
+        self.assertEqual(response.status_code, 200)  # should still process successfully
         data = response.json()
         
-        # 验证错误处理
+        # check error handling
         self.assertIn('Number', data['types'])
         self.assertIn('Date', data['types'])
 
@@ -291,11 +288,11 @@ class DataTypeConversionTests(TestCase):
     def setUp(self):
         self.client = Client()
         
-        # 修复CSV格式，移除不合法的逗号
+        # fix csv format by removing illegal commas
         csv_data = """Text,Number,Date,Mixed
-Regular text,123,2024-01-01,123.45
-More text,456,2024-01-02,ABC123
-Final text,789,2024-01-03,XYZ789"""
+            Regular text,123,2024-01-01,123.45
+            More text,456,2024-01-02,ABC123
+            Final text,789,2024-01-03,XYZ789"""
         
         self.test_file = SimpleUploadedFile(
             "conversion_test.csv",
