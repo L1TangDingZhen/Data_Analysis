@@ -75,3 +75,73 @@ git clone https://github.com/L1TangDingZhen/Data_Analysis
 
 # Start the application using Docker Compose
 docker-compose up --build
+
+
+## Accessing the Application
+
+- **Frontend**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:8000](http://localhost:8000)
+
+## Usage
+
+### Upload Data
+- Support for CSV and Excel files
+- Automatic type inference
+- Initial data preview
+
+### Analyze Types
+- View inferred data types
+- Check sample values
+- See type inference confidence scores
+
+### Modify Types
+- Change data types manually
+- Preview changes instantly
+- Revert changes if needed
+
+### Export and Statistics
+- Export processed data
+- View detailed statistics
+- Analyze data distributions
+
+## Technical Implementation Details
+
+### AI Model Integration
+- Uses spaCy's `en_core_web_md` model
+- Enhances type inference accuracy
+- Handles complex data patterns
+- Provides confidence scores
+
+### Data Processing Pipeline
+- Initial file reading
+- Special value cleaning
+- AI-enhanced type inference
+- Type conversion
+- Performance optimization
+
+### Performance Features
+- Efficient memory usage
+- Optimized data types
+- Chunk processing for large files
+- Caching mechanisms
+
+## Testing
+
+The project includes comprehensive test coverage:
+- Unit tests for core functionality
+- Integration tests for API endpoints
+- Complex data handling tests
+- Performance tests
+- Error handling tests
+
+## Project Requirements Fulfilled
+
+- ✅ Pandas data type inference and conversion
+- ✅ Handling of default 'object' type columns
+- ✅ Complex data type processing
+- ✅ Large file handling
+- ✅ Performance optimization
+- ✅ Comprehensive error handling
+- ✅ Clean and maintainable code
+- ✅ User-friendly interface
+- ✅ Detailed documentation
