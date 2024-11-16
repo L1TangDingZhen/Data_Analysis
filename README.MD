@@ -12,6 +12,7 @@ This project is a web application for analyzing and converting data types in dat
 ### Installation and Running
 
 ```bash
+1. Using Docker
 # Clone the repository
 git clone https://github.com/L1TangDingZhen/Data_Analysis
 
@@ -19,8 +20,62 @@ git clone https://github.com/L1TangDingZhen/Data_Analysis
 # Start the application using Docker Compose
 docker-compose up --build
 
+2. Mannual Running
+
+# Clone the repository
+git clone https://github.com/L1TangDingZhen/Data_Analysis
+
+
+# Move to back end and run
+cd back/analysis
+conda create -n dataenv python=3.9
+conda activate dataenv
+pip install -r requirements.txt
+python -m spacy download en_core_web_md
+python manage.py runserver
+
+# Move to front-end and run
+cd front
+npm start
 
 ```
+
+
+## Use Cases
+
+### Common Data Type Issues Solved
+- Mixed date formats (e.g., "1990-01-01", "01/01/1990", "Jan 1, 1990")
+- Inconsistent boolean values (e.g., "YES/NO", "1/0", "True/False")
+- Complex height/weight formats (e.g., "5'11"", "180cm", "5 feet 11 inches")
+- Mixed numeric formats (e.g., currency with symbols, percentages)
+- Categorical data with multiple representations (e.g., gender: "M/F", "Male/Female", "Boy/Girl")
+
+## Core Algorithms
+
+### Intelligent Type Inference
+- Initial complexity detection based on data patterns
+- Rule-based preliminary type checking
+- SpaCy model-based analysis for complex cases
+- Confidence scoring system for type predictions
+- Type conversion with fallback mechanisms
+
+
+## API Documentation
+
+### Endpoints
+- `POST /analyze/`: Upload and analyze file
+  - Returns: Column types, sample values, and inference info
+- `POST /update-type/`: Update column type
+  - Parameters: column, new_type, file_id
+- `GET /export/{file_id}/`: Export processed data
+
+## Configuration
+
+### Environment Variables
+- `DEBUG`: Enable/disable debug mode (default: True)
+- `CACHE_TIMEOUT`: Cache expiration time in seconds (default: 3600)
+- `MAX_UPLOAD_SIZE`: Maximum file size in MB (default: 10)
+
 
 
 ## Key Features
@@ -81,7 +136,11 @@ docker-compose up --build
 - Statistical visualization
 - Export functionality
 
+## Known Limitations
 
+- Maximum file size: 10MB
+- SpaCy model requires significant memory
+- Some complex date formats may not be detected
 
 
 # Data Type Analyzer with AI-Enhanced Type Inference
@@ -214,14 +273,3 @@ The project includes comprehensive test coverage:
 - ✅ Clean and maintainable code
 - ✅ User-friendly interface
 - ✅ Detailed documentation
-
-
-
-
-
-
-
-
-
-
-
