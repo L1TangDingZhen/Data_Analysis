@@ -23,8 +23,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-
 class AnalyzeFileView(APIView):
     parser_classes = (MultiPartParser,)
 
@@ -38,7 +36,6 @@ class AnalyzeFileView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # file check for csv and excel
             if not file.name.endswith(('.csv', '.xlsx')):
                 return Response(
                     {'error': 'Invalid file type. Please upload CSV or Excel file'}, 
@@ -46,7 +43,6 @@ class AnalyzeFileView(APIView):
                 )
 
             try:
-                # read file
                 if file.name.endswith('.csv'):
                     df = pd.read_csv(io.StringIO(file.read().decode('utf-8')))
                 else:
@@ -60,31 +56,21 @@ class AnalyzeFileView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # data type inference
+            # 存储推断信息
+            inference_info = {}
+            types = {}
+            
+            # 数据类型推断
             logger.info("Starting data type inference")
             df = optimize_dataframe(df)
-            df = infer_and_convert_data_types(df)
-            logger.info("Completed data type inference")
-
-            # prepare response data
-            types = {}
-            samples = {}
-            inference_info = {}  #store inference information
             
+            # 对每列进行分析
             for column in df.columns:
                 try:
-                    # get data type
-                    types[column] = str(df[column].dtype)
-                    
-                    # first 5 non-null values (sample values)
-                    samples[column] = get_column_sample(df, column)
-                    
                     non_null_values = df[column].dropna().tolist()
                     if len(non_null_values) > 0:
-                        # check if column is complex data
                         is_complex = is_complex_data(non_null_values, column)
                         if is_complex:
-                            # receive the model inference and confidence
                             inferred_type, confidence = SpacyModelCache.analyze_complex_data(
                                 non_null_values, column
                             )
@@ -94,28 +80,46 @@ class AnalyzeFileView(APIView):
                                 'confidence': float(confidence),
                                 'used_model': confidence > 0.5
                             }
+                            # 如果置信度足够，立即应用类型转换
+                            if confidence > 0.5:
+                                if inferred_type == 'datetime':
+                                    df[column] = pd.to_datetime(df[column], errors='coerce')
+                                elif inferred_type == 'boolean':
+                                    bool_map = {
+                                        '1': True, '0': False,
+                                        'true': True, 'false': False,
+                                        'yes': True, 'no': False,
+                                        1: True, 0: False
+                                    }
+                                    df[column] = df[column].astype(str).str.lower().map(bool_map)
+                                elif inferred_type == 'category':
+                                    df[column] = pd.Categorical(df[column])
+                                elif inferred_type == 'number':
+                                    df[column] = pd.to_numeric(df[column], errors='coerce')
                         else:
                             inference_info[column] = {
                                 'is_complex': False,
                                 'used_model': False
                             }
-                            
+                            # 使用基础推断
+                            df = infer_and_convert_data_types(df)
                 except Exception as e:
                     logger.error(f"Error processing column {column}: {str(e)}")
-                    types[column] = 'object'
-                    samples[column] = "Error in processing"
                     inference_info[column] = {
                         'is_complex': False,
                         'error': str(e)
                     }
+                
+                # 记录最终类型
+                types[column] = str(df[column].dtype)
 
-            # unique file id for each file
+            # 生成文件ID和其他响应数据
             file_id = generate_file_id()
             save_dataframe(file_id, df)
 
             response_data = {
                 'types': types,
-                'samples': samples,
+                'samples': {col: get_column_sample(df, col) for col in df.columns},
                 'rows': len(df),
                 'columns': len(df.columns),
                 'preview_data': generate_preview_data(df),
@@ -132,7 +136,6 @@ class AnalyzeFileView(APIView):
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
 
 # user can update the data type of a column
 class UpdateTypeView(APIView):
@@ -150,151 +153,120 @@ class UpdateTypeView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # get the saved DataFrame
+            # 获取数据框
             df = get_dataframe(file_id)
             
-            print(df)
-
-            # transfer the specific column type
+            # 记录转换前的信息
+            original_type = str(df[column].dtype)
+            original_values = df[column].head().tolist()
+            logger.info(f"""
+            Starting type conversion for column: {column}
+            Original type: {original_type}
+            Original sample values: {original_values}
+            Target type: {new_type}
+            """)
+            
+            # 仅转换指定列的类型
             try:
-                # number type
-                if new_type == 'number':
-                    df[column] = pd.to_numeric(df[column], errors='coerce')
-
-                # datetime type
-                elif new_type == 'datetime':
-                    # complexe date format
-                    if df[column].dtype in ['int64', 'float64']:
-                        # ignore seconds and nanoseconds
-                        df[column] = pd.to_datetime(df[column], unit='ns')
-                    else:
-                        # check the date format
-                        sample_dates = df[column].dropna().iloc[:5].tolist()
-                        date_formats = [
-                        '%d/%m/%Y',     # 31/12/2023
-                        '%d/%m/%y',     # 31/12/23
-                        '%d-%m-%Y',     # 31-12-2023
-                        '%d.%m.%Y',     # 31.12.2023
-                    ]
-
-                        # the best date format
-                        best_format = None
-                        max_success = 0
-                        
-                        for date_format in date_formats:
-                            try:
-                                success_count = 0
-                                for date_str in sample_dates:
-                                    try:
-                                        if isinstance(date_str, str):
-                                            pd.to_datetime(date_str, format=date_format)
-                                            success_count += 1
-                                    except:
-                                        continue
-                                if success_count > max_success:
-                                    max_success = success_count
-                                    best_format = date_format
-                            except:
-                                continue
-
-                        if best_format:
-                            # use the best format to convert
-                            df[column] = pd.to_datetime(df[column], format=best_format, errors='coerce')
-                        else:
-                            # use the general format to convert
-                            df[column] = pd.to_datetime(df[column], errors='coerce')
-
-                # boolean type
-                elif new_type == 'boolean':
-                    bool_map = {
-                        'True': True, 'False': False,
-                        'true': True, 'false': False,
-                        'TRUE': True, 'FALSE': False,
-                        'T': True, 'F': False,
-                        't': True, 'f': False,
-                        'Yes': True, 'No': False,
-                        'yes': True, 'no': False,
-                        'Y': True, 'N': False,
-                        'y': True, 'n': False,
-                        '1': True, '0': False,
-                        1: True, 0: False
-                    }
-                    df[column] = df[column].map(bool_map)
-                elif new_type == 'category':
+                if new_type == 'category':
+                    logger.info(f"Converting {column} to category type...")
                     df[column] = pd.Categorical(df[column])
-                else:  # text
-                    df[column] = df[column].astype(str)
+                    unique_categories = df[column].cat.categories.tolist()
+                    logger.info(f"Created category with unique values: {unique_categories}")
 
-                # save the updated DataFrame
-                save_dataframe(file_id, df)
+                elif new_type == 'number':
+                    logger.info(f"Converting {column} to numeric type...")
+                    before_conversion = df[column].head().tolist()
+                    df[column] = pd.to_numeric(df[column], errors='coerce')
+                    after_conversion = df[column].head().tolist()
+                    null_count = df[column].isna().sum()
+                    logger.info(f"""
+                    Numeric conversion results for {column}:
+                    Before: {before_conversion}
+                    After: {after_conversion}
+                    Number of null values after conversion: {null_count}
+                    """)
 
-                # prepare preview data
-                preview_data = []
-                for _, row in df.head(5).iterrows():
-                    row_dict = {}
-                    for col in df.columns:
-                        value = row[col]
-                        if pd.isna(value):
-                            row_dict[col] = "No data available"
-                        elif isinstance(value, (np.datetime64, pd.Timestamp)):
-                            # australia date format
-                            row_dict[col] = value.strftime('%d/%m/%Y')
-                        elif isinstance(value, (np.floating, float)):
-                            if np.isnan(value):
-                                row_dict[col] = "No data available"
-                            else:
-                                row_dict[col] = f"{float(value):.2f}" if value % 1 != 0 else str(int(value))
-                        else:
-                            row_dict[col] = str(value)
-                    preview_data.append(row_dict)
+                elif new_type == 'datetime':
+                    logger.info(f"Converting {column} to datetime type...")
+                    before_conversion = df[column].head().tolist()
+                    df[column] = pd.to_datetime(df[column], errors='coerce')
+                    after_conversion = df[column].head().tolist()
+                    null_count = df[column].isna().sum()
+                    logger.info(f"""
+                    Datetime conversion results for {column}:
+                    Before: {before_conversion}
+                    After: {after_conversion}
+                    Number of null values after conversion: {null_count}
+                    """)
 
-                    # debug using print
-                    # print(preview_data)
+                elif new_type == 'boolean':
+                    logger.info(f"Converting {column} to boolean type...")
+                    before_conversion = df[column].head().tolist()
+                    bool_map = {
+                        '1': True, '0': False,
+                        'true': True, 'false': False,
+                        'yes': True, 'no': False,
+                        1: True, 0: False,
+                        'True': True, 'False': False
+                    }
+                    df[column] = df[column].astype(str).str.lower().map(bool_map)
+                    after_conversion = df[column].head().tolist()
+                    null_count = df[column].isna().sum()
+                    logger.info(f"""
+                    Boolean conversion results for {column}:
+                    Before: {before_conversion}
+                    After: {after_conversion}
+                    Number of null values after conversion: {null_count}
+                    """)
 
-
-                # get the sample value
-                sample_value = None
-                non_null_values = df[column].dropna()
-                if not non_null_values.empty:
-                    first_value = non_null_values.iloc[0]
-                    if pd.isna(first_value):
-                        sample_value = "No data available"
-                    elif isinstance(first_value, (np.floating, float)):
-                        sample_value = f"{float(first_value):.2f}" if first_value % 1 != 0 else str(int(first_value))
-                    elif isinstance(first_value, (np.integer, int)):
-                        sample_value = str(int(first_value))
-                    elif isinstance(first_value, (np.datetime64, pd.Timestamp)):
-                        sample_value = first_value.strftime('%m/%d/%Y')  # day/month/year
-                    else:
-                        sample_value = str(first_value).strip()
                 else:
-                    sample_value = "No data available"
-
+                    logger.info(f"Converting {column} to text type...")
+                    df[column] = df[column].astype(str)
+                
+                # 记录转换结果
+                final_type = str(df[column].dtype)
+                final_values = df[column].head().tolist()
+                conversion_success = not df[column].isna().all()
+                
+                logger.info(f"""
+                Type conversion completed for {column}:
+                Final type: {final_type}
+                Final sample values: {final_values}
+                Conversion success: {conversion_success}
+                """)
+                
+                # 保存更新后的数据框
+                save_dataframe(file_id, df)
+                
                 return Response({
-                    'preview_data': preview_data,
-                    'new_type': str(df[column].dtype),
-                    'sample_value': sample_value,
+                    'preview_data': generate_preview_data(df),
+                    'inferred_type': str(df[column].dtype),
+                    'display_type': new_type,
+                    'sample_value': get_column_sample(df, column),
+                    'new_type': new_type,  # 添加这一行
                     'message': f'Successfully updated type of {column} to {new_type}'
                 })
 
             except Exception as e:
-                print(f"Error in type conversion: {str(e)}")
+                logger.error(f"""
+                Error during type conversion:
+                Column: {column}
+                Target type: {new_type}
+                Error message: {str(e)}
+                Current column state: {df[column].head().tolist()}
+                """)
                 return Response(
-                    {'error': f'Failed to convert type: {str(e)}'}, 
+                    {'error': f'Failed to convert {column} to {new_type}: {str(e)}'}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
         except Exception as e:
-            print(f"Error in update type: {str(e)}")
+            logger.error(f"Error in update type: {str(e)}")
             return Response(
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-
-
-
-
 
 class ExportDataView(APIView):
     def get(self, request, file_id):
