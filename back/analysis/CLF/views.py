@@ -65,52 +65,114 @@ class AnalyzeFileView(APIView):
             df = optimize_dataframe(df)
             
             # 对每列进行分析
+            # for column in df.columns:
+            #     try:
+            #         non_null_values = df[column].dropna().tolist()
+            #         if len(non_null_values) > 0:
+            #             is_complex = is_complex_data(non_null_values, column)
+            #             if is_complex:
+            #                 inferred_type, confidence = SpacyModelCache.analyze_complex_data(
+            #                     non_null_values, column
+            #                 )
+            #                 inference_info[column] = {
+            #                     'is_complex': True,
+            #                     'model_inference': inferred_type,
+            #                     'confidence': float(confidence),
+            #                     'used_model': confidence > 0.5
+            #                 }
+            #                 # 如果置信度足够，立即应用类型转换
+            #                 if confidence > 0.5:
+            #                     if inferred_type == 'datetime':
+            #                         df[column] = pd.to_datetime(df[column], errors='coerce')
+            #                     elif inferred_type == 'boolean':
+            #                         bool_map = {
+            #                             '1': True, '0': False,
+            #                             'true': True, 'false': False,
+            #                             'yes': True, 'no': False,
+            #                             1: True, 0: False
+            #                         }
+            #                         df[column] = df[column].astype(str).str.lower().map(bool_map)
+            #                     elif inferred_type == 'category':
+            #                         df[column] = pd.Categorical(df[column])
+            #                     elif inferred_type == 'number':
+            #                         df[column] = pd.to_numeric(df[column], errors='coerce')
+            #             else:
+            #                 inference_info[column] = {
+            #                     'is_complex': False,
+            #                     'used_model': False
+            #                 }
+            #                 # 使用基础推断
+            #                 df = infer_and_convert_data_types(df)
+            #     except Exception as e:
+            #         logger.error(f"Error processing column {column}: {str(e)}")
+            #         inference_info[column] = {
+            #             'is_complex': False,
+            #             'error': str(e)
+            #         }
+                
+            #     # 记录最终类型
+            #     types[column] = str(df[column].dtype)
+
+
+
             for column in df.columns:
                 try:
                     non_null_values = df[column].dropna().tolist()
                     if len(non_null_values) > 0:
                         is_complex = is_complex_data(non_null_values, column)
-                        if is_complex:
+                        
+                        # 检查特定列名模式
+                        col_lower = column.lower()
+                        if 'grade' in col_lower or 'level' in col_lower:
+                            inferred_type = 'category'
+                            confidence = 0.9
+                        elif 'country' in col_lower or 'state' in col_lower:
+                            inferred_type = 'category'
+                            confidence = 0.9
+                        elif 'height' in col_lower or 'weight' in col_lower:
+                            inferred_type = 'number'
+                            confidence = 0.9
+                        elif is_complex:
                             inferred_type, confidence = SpacyModelCache.analyze_complex_data(
                                 non_null_values, column
                             )
-                            inference_info[column] = {
-                                'is_complex': True,
-                                'model_inference': inferred_type,
-                                'confidence': float(confidence),
-                                'used_model': confidence > 0.5
-                            }
-                            # 如果置信度足够，立即应用类型转换
-                            if confidence > 0.5:
-                                if inferred_type == 'datetime':
-                                    df[column] = pd.to_datetime(df[column], errors='coerce')
-                                elif inferred_type == 'boolean':
-                                    bool_map = {
-                                        '1': True, '0': False,
-                                        'true': True, 'false': False,
-                                        'yes': True, 'no': False,
-                                        1: True, 0: False
-                                    }
-                                    df[column] = df[column].astype(str).str.lower().map(bool_map)
-                                elif inferred_type == 'category':
-                                    df[column] = pd.Categorical(df[column])
-                                elif inferred_type == 'number':
-                                    df[column] = pd.to_numeric(df[column], errors='coerce')
                         else:
-                            inference_info[column] = {
-                                'is_complex': False,
-                                'used_model': False
-                            }
-                            # 使用基础推断
-                            df = infer_and_convert_data_types(df)
+                            # 基础类型推断
+                            if all(isinstance(v, bool) or str(v).lower() in ['true', 'false', '1', '0'] 
+                                for v in non_null_values):
+                                inferred_type = 'boolean'
+                                confidence = 1.0
+                            elif all(isinstance(v, (int, float)) for v in non_null_values):
+                                inferred_type = 'number'
+                                confidence = 1.0
+                            else:
+                                inferred_type = 'text'
+                                confidence = 0.0
+                                
+                        inference_info[column] = {
+                            'is_complex': is_complex,
+                            'model_inference': inferred_type,
+                            'confidence': float(confidence),
+                            'used_model': confidence > 0.5
+                        }
+                        
+                        # 应用类型转换
+                        if confidence > 0.5:
+                            if inferred_type == 'category':
+                                df[column] = pd.Categorical(df[column])
+                            elif inferred_type == 'number':
+                                df[column] = pd.to_numeric(df[column], errors='coerce')
+                            elif inferred_type == 'boolean':
+                                bool_map = {'1': True, '0': False, 'true': True, 'false': False}
+                                df[column] = df[column].astype(str).str.lower().map(bool_map)
+                                
                 except Exception as e:
                     logger.error(f"Error processing column {column}: {str(e)}")
                     inference_info[column] = {
                         'is_complex': False,
                         'error': str(e)
                     }
-                
-                # 记录最终类型
+                    
                 types[column] = str(df[column].dtype)
 
             # 生成文件ID和其他响应数据
@@ -155,89 +217,33 @@ class UpdateTypeView(APIView):
 
             # 获取数据框
             df = get_dataframe(file_id)
-            
-            # 记录转换前的信息
             original_type = str(df[column].dtype)
-            original_values = df[column].head().tolist()
-            logger.info(f"""
-            Starting type conversion for column: {column}
-            Original type: {original_type}
-            Original sample values: {original_values}
-            Target type: {new_type}
-            """)
+            
+            logger.info(f"Updating column {column} type from {original_type} to {new_type}")
             
             # 仅转换指定列的类型
             try:
                 if new_type == 'category':
-                    logger.info(f"Converting {column} to category type...")
                     df[column] = pd.Categorical(df[column])
-                    unique_categories = df[column].cat.categories.tolist()
-                    logger.info(f"Created category with unique values: {unique_categories}")
-
                 elif new_type == 'number':
-                    logger.info(f"Converting {column} to numeric type...")
-                    before_conversion = df[column].head().tolist()
                     df[column] = pd.to_numeric(df[column], errors='coerce')
-                    after_conversion = df[column].head().tolist()
-                    null_count = df[column].isna().sum()
-                    logger.info(f"""
-                    Numeric conversion results for {column}:
-                    Before: {before_conversion}
-                    After: {after_conversion}
-                    Number of null values after conversion: {null_count}
-                    """)
-
                 elif new_type == 'datetime':
-                    logger.info(f"Converting {column} to datetime type...")
-                    before_conversion = df[column].head().tolist()
                     df[column] = pd.to_datetime(df[column], errors='coerce')
-                    after_conversion = df[column].head().tolist()
-                    null_count = df[column].isna().sum()
-                    logger.info(f"""
-                    Datetime conversion results for {column}:
-                    Before: {before_conversion}
-                    After: {after_conversion}
-                    Number of null values after conversion: {null_count}
-                    """)
-
                 elif new_type == 'boolean':
-                    logger.info(f"Converting {column} to boolean type...")
-                    before_conversion = df[column].head().tolist()
                     bool_map = {
                         '1': True, '0': False,
                         'true': True, 'false': False,
                         'yes': True, 'no': False,
-                        1: True, 0: False,
-                        'True': True, 'False': False
+                        1: True, 0: False
                     }
                     df[column] = df[column].astype(str).str.lower().map(bool_map)
-                    after_conversion = df[column].head().tolist()
-                    null_count = df[column].isna().sum()
-                    logger.info(f"""
-                    Boolean conversion results for {column}:
-                    Before: {before_conversion}
-                    After: {after_conversion}
-                    Number of null values after conversion: {null_count}
-                    """)
-
                 else:
-                    logger.info(f"Converting {column} to text type...")
                     df[column] = df[column].astype(str)
-                
-                # 记录转换结果
-                final_type = str(df[column].dtype)
-                final_values = df[column].head().tolist()
-                conversion_success = not df[column].isna().all()
-                
-                logger.info(f"""
-                Type conversion completed for {column}:
-                Final type: {final_type}
-                Final sample values: {final_values}
-                Conversion success: {conversion_success}
-                """)
                 
                 # 保存更新后的数据框
                 save_dataframe(file_id, df)
+                
+                logger.info(f"Successfully converted {column} to {new_type}")
                 
                 return Response({
                     'preview_data': generate_preview_data(df),
@@ -249,13 +255,7 @@ class UpdateTypeView(APIView):
                 })
 
             except Exception as e:
-                logger.error(f"""
-                Error during type conversion:
-                Column: {column}
-                Target type: {new_type}
-                Error message: {str(e)}
-                Current column state: {df[column].head().tolist()}
-                """)
+                logger.error(f"Error converting {column} to {new_type}: {str(e)}")
                 return Response(
                     {'error': f'Failed to convert {column} to {new_type}: {str(e)}'}, 
                     status=status.HTTP_400_BAD_REQUEST
@@ -267,6 +267,7 @@ class UpdateTypeView(APIView):
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class ExportDataView(APIView):
     def get(self, request, file_id):

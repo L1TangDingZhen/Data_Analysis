@@ -10,44 +10,128 @@ import spacy
 from typing import Optional, Dict, Any, List, Tuple
 
 
+# 旧的logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# )
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
 
+
+# def is_complex_data(values: List[Any], column_name: str) -> bool:
+#     """
+#     基于数据本身的复杂性判断，而不是预设的列名
+#     复杂数据的判断标准：
+#     1. 数据表示方式不一致（如同一概念有多种写法）
+#     2. 数据类型混杂
+#     3. 格式不统一
+#     """
+#     try:
+#         # 获取非空值
+#         clean_values = [v for v in values if pd.notna(v)]
+#         if not clean_values:
+#             return False
+
+#         # 数据特征收集
+#         characteristics = {
+#             'formats': set(),      # 数据格式
+#             'types': set(),        # 数据类型
+#             'representations': set()  # 数据表示方式
+#         }
+
+#         # 分析每个值的特征
+#         for value in clean_values:
+#             orig_value = value
+#             str_value = str(value).strip().lower()
+            
+#             # 1. 检查原始数据类型
+#             if isinstance(orig_value, (int, float)):
+#                 characteristics['types'].add('number')
+#             elif isinstance(orig_value, pd.Timestamp):
+#                 characteristics['types'].add('datetime')
+#             else:
+#                 # 2. 尝试类型转换
+#                 try:
+#                     float(str_value)
+#                     characteristics['types'].add('number')
+#                 except ValueError:
+#                     try:
+#                         pd.to_datetime(str_value)
+#                         characteristics['types'].add('datetime')
+#                     except:
+#                         characteristics['types'].add('text')
+
+#             # 3. 检查数据格式特征
+#             if isinstance(orig_value, str):
+#                 # 分隔符检查
+#                 if '/' in str_value or '-' in str_value or '.' in str_value:
+#                     characteristics['formats'].add('separated')
+#                 # 大小写变化检查
+#                 if str_value != str(orig_value).strip():
+#                     characteristics['formats'].add('case_variant')
+#                 # 长度检查（区分缩写和全称）
+#                 characteristics['formats'].add(f'len_{len(str_value)}')
+#                 # 数字和文本混合检查
+#                 if any(c.isdigit() for c in str_value) and any(c.isalpha() for c in str_value):
+#                     characteristics['formats'].add('mixed')
+
+#             # 4. 记录不同的表示方式
+#             characteristics['representations'].add(str_value)
+
+#         # 评估复杂性
+#         is_complex = (
+#             # 类型混杂
+#             len(characteristics['types']) > 1 or
+#             # 格式不统一（包括分隔符、大小写、长度等）
+#             len(characteristics['formats']) > 2 or
+#             # 同一概念有多种表示方式
+#             (len(characteristics['representations']) > len(set(str(v).strip().lower() for v in clean_values)) * 0.5) or
+#             # 存在缩写和全称混用
+#             (any(f'len_1' in f or f'len_2' in f for f in characteristics['formats']) and
+#              any(f'len_{i}' in f for f in characteristics['formats'] for i in range(3, 10)))
+#         )
+
+#         logger.info(f"Column {column_name} complexity check: {is_complex}")
+#         if is_complex:
+#             logger.info(f"Column characteristics: {characteristics}")
+
+#         return is_complex
+
+#     except Exception as e:
+#         logger.warning(f"Error checking complexity for {column_name}: {str(e)}")
+#         return False
+
 def is_complex_data(values: List[Any], column_name: str) -> bool:
-    """
-    基于数据本身的复杂性判断，而不是预设的列名
-    复杂数据的判断标准：
-    1. 数据表示方式不一致（如同一概念有多种写法）
-    2. 数据类型混杂
-    3. 格式不统一
-    """
+    # 修改评估复杂性的逻辑
     try:
-        # 获取非空值
         clean_values = [v for v in values if pd.notna(v)]
         if not clean_values:
             return False
-
-        # 数据特征收集
+            
         characteristics = {
-            'formats': set(),      # 数据格式
-            'types': set(),        # 数据类型
-            'representations': set()  # 数据表示方式
+            'formats': set(),
+            'types': set(),
+            'representations': set()
         }
-
-        # 分析每个值的特征
+        
+        # 基础类型检查
+        if all(isinstance(v, (int, float)) for v in clean_values):
+            return False
+        if all(isinstance(v, bool) for v in clean_values):
+            return False
+        
+        # 数据特征分析
         for value in clean_values:
-            orig_value = value
             str_value = str(value).strip().lower()
             
-            # 1. 检查原始数据类型
-            if isinstance(orig_value, (int, float)):
+            # 类型检查
+            if isinstance(value, (int, float)):
                 characteristics['types'].add('number')
-            elif isinstance(orig_value, pd.Timestamp):
-                characteristics['types'].add('datetime')
+            elif isinstance(value, pd.Timestamp):
+                characteristics['types'].add('datetime') 
             else:
-                # 2. 尝试类型转换
                 try:
                     float(str_value)
                     characteristics['types'].add('number')
@@ -57,46 +141,201 @@ def is_complex_data(values: List[Any], column_name: str) -> bool:
                         characteristics['types'].add('datetime')
                     except:
                         characteristics['types'].add('text')
-
-            # 3. 检查数据格式特征
-            if isinstance(orig_value, str):
-                # 分隔符检查
-                if '/' in str_value or '-' in str_value or '.' in str_value:
-                    characteristics['formats'].add('separated')
-                # 大小写变化检查
-                if str_value != str(orig_value).strip():
-                    characteristics['formats'].add('case_variant')
-                # 长度检查（区分缩写和全称）
-                characteristics['formats'].add(f'len_{len(str_value)}')
-                # 数字和文本混合检查
-                if any(c.isdigit() for c in str_value) and any(c.isalpha() for c in str_value):
-                    characteristics['formats'].add('mixed')
-
-            # 4. 记录不同的表示方式
+            
+            # 数据表示方式检查        
             characteristics['representations'].add(str_value)
-
-        # 评估复杂性
+            
+        # 判断复杂性条件
         is_complex = (
-            # 类型混杂
-            len(characteristics['types']) > 1 or
-            # 格式不统一（包括分隔符、大小写、长度等）
-            len(characteristics['formats']) > 2 or
-            # 同一概念有多种表示方式
-            (len(characteristics['representations']) > len(set(str(v).strip().lower() for v in clean_values)) * 0.5) or
-            # 存在缩写和全称混用
-            (any(f'len_1' in f or f'len_2' in f for f in characteristics['formats']) and
-             any(f'len_{i}' in f for f in characteristics['formats'] for i in range(3, 10)))
+            len(characteristics['types']) > 1 or  # 多种数据类型混合
+            (len(characteristics['representations']) / len(clean_values) > 0.8)  # 数据表示方式过于分散
         )
-
-        logger.info(f"Column {column_name} complexity check: {is_complex}")
-        if is_complex:
-            logger.info(f"Column characteristics: {characteristics}")
-
+        
         return is_complex
-
+        
     except Exception as e:
         logger.warning(f"Error checking complexity for {column_name}: {str(e)}")
         return False
+
+
+
+
+
+
+
+
+
+#旧的
+# class SpacyModelCache:
+#     _instance = None
+#     _model = None
+
+#     @classmethod
+#     def get_model(cls) -> spacy.language.Language:
+#         # load spacy model
+#         if cls._model is None:
+#             try:
+#                 cls._model = spacy.load('en_core_web_md')
+#                 logger.info("Successfully loaded spaCy model")
+#             except Exception as e:
+#                 logger.error(f"Error loading spaCy model: {str(e)}")
+#                 raise
+#         return cls._model
+
+#     @classmethod
+#     def analyze_complex_data(cls, 
+#             values: List[Any], 
+#             column_name: str) -> Tuple[str, float]:
+        
+#         # complex data analysis
+#         # values is a list of values in the column
+#         # column_name is the name of the column
+#         # return the inferred type and confidence (type and confidence)
+#         try:
+#             model = cls.get_model()
+#             predictions = []
+#             confidence_scores = []
+            
+#             # 10 non-null values for analysis
+#             sample_values = [str(v) for v in values[:10] if pd.notna(v)]
+            
+#             for value in sample_values:
+#                 doc = model(value)
+                
+#                 # get entity type
+#                 if doc.ents:
+#                     ent = doc.ents[0]
+#                     predictions.append(cls._map_entity_to_type(ent.label_))
+#                     confidence_scores.append(ent._.trf_score if hasattr(ent._, 'trf_score') else 0.5)
+#                 else:
+#                     # get type from POS
+#                     pos_type = cls._get_type_from_pos(doc)
+#                     if pos_type:
+#                         predictions.append(pos_type)
+#                         confidence_scores.append(0.3)  # low confidence
+            
+#             if predictions:
+#                 # most common prediction
+#                 most_common = max(set(predictions), key=predictions.count)
+#                 confidence = sum(c for p, c in zip(predictions, confidence_scores) 
+#                     if p == most_common) / len(predictions)
+#                 return most_common, confidence
+            
+#             return 'text', 0.0  # return text type if no entities found
+            
+#         except Exception as e:
+#             logger.warning(f"Error in complex data analysis: {str(e)}")
+#             return 'text', 0.0
+            
+#     @staticmethod
+#     def _map_entity_to_type(ent_label: str) -> str:
+#         # entity label to data type mapping
+#         type_mapping = {
+#             'DATE': 'datetime',
+#             'TIME': 'datetime',
+#             'CARDINAL': 'number',
+#             'MONEY': 'number',
+#             'PERCENT': 'number',
+#             'QUANTITY': 'number',
+#             'ORDINAL': 'number'
+#         }
+#         return type_mapping.get(ent_label, 'text')
+        
+#     @staticmethod
+#     def _get_type_from_pos(doc: spacy.tokens.Doc) -> Optional[str]:
+#         # predict type based on POS
+#         # main POS tag
+#         main_pos = doc[0].pos_
+        
+#         if main_pos in ['NUM']:
+#             return 'number'
+#         elif main_pos in ['PROPN', 'NOUN']:
+#             return 'category'
+            
+#         return None
+
+
+# # complex data detection
+# def is_complex_data(values: List[Any], column_name: str) -> bool:
+#     # check if the column contains complex data
+#     # return True if complex data is detected, False otherwise
+#     try:
+#         # non null values
+#         clean_values = [v for v in values if pd.notna(v)]
+#         if not clean_values:
+#             return False
+            
+#         # first 10 values
+#         value_types = set()
+#         for value in clean_values[:10]:  # check first 10 values
+#             # if it's a pandas Timestamp
+#             if isinstance(value, pd.Timestamp):
+#                 value_types.add('date')
+#             # if it's a number
+#             elif isinstance(value, (int, float)):
+#                 value_types.add('number')
+#             elif isinstance(value, str):
+#                 # if it's a string, check if it can be converted to other types
+#                 try:
+#                     float(value)
+#                     value_types.add('number')
+#                     continue
+#                 except ValueError:
+#                     pass
+                
+#                 # convert to datetime
+#                 try:
+#                     pd.to_datetime(value)
+#                     value_types.add('date')
+#                     continue
+#                 except:
+#                     pass
+                
+#                 # check if it's a currency format (e.g., $1,234.56)
+#                 if re.match(r'^\$?\d{1,3}(,\d{3})*(\.\d+)?$', value):
+#                     value_types.add('currency')
+#                     continue
+                    
+#                 # e.g., 10%, 10.5%, 0.5%
+#                 if re.match(r'^\d+(\.\d+)?%$', value):
+#                     value_types.add('percentage')
+#                     continue
+                
+#                 # other cases are considered as text
+#                 value_types.add('text')
+        
+#         # multiple types or special types (currency, percentage) are considered complex
+#         special_types = {'currency', 'percentage'}
+#         return len(value_types) > 1 or bool(value_types.intersection(special_types))
+            
+#     except Exception as e:
+#         logger.warning(f"Error checking complex data: {str(e)}")
+#         return False
+
+
+
+
+
+
+
+#新的
+# class SpacyModelCache:
+#     _instance = None
+#     _model = None
+
+#     @classmethod
+#     def get_model(cls):
+#         if cls._model is None:
+#             try:
+#                 cls._model = spacy.load('en_core_web_md')
+#                 logger.info("Successfully loaded spaCy model")
+#             except Exception as e:
+#                 logger.error(f"Error loading spaCy model: {str(e)}")
+#                 raise
+#         return cls._model
+
+
+
 
 class SpacyModelCache:
     _model = None
@@ -177,6 +416,75 @@ class SpacyModelCache:
             return True
         except:
             return False
+
+
+
+
+#old
+# def is_complex_data(values: List[Any], column_name: str) -> bool:
+#     """
+#     Determine if a column contains complex data that requires advanced processing
+#     """
+#     try:
+#         # Get clean non-null values for analysis
+#         clean_values = [v for v in values if pd.notna(v)][:10]
+#         if not clean_values:
+#             return False
+
+#         # Track type variations
+#         value_types = set()
+#         format_variations = 0
+
+#         for value in clean_values:
+#             if isinstance(value, pd.Timestamp):
+#                 value_types.add('datetime')
+#             elif isinstance(value, (int, float)):
+#                 value_types.add('number')
+#             elif isinstance(value, str):
+#                 # Check currency format
+#                 if re.match(r'^[$£€¥]\s*\d+[.,]?\d*\s*[kKmMbB]?$', value):
+#                     value_types.add('currency')
+#                     continue
+
+#                 # Check percentage format
+#                 if re.match(r'^\d+(\.\d+)?%$', value):
+#                     value_types.add('percentage')
+#                     continue
+
+#                 # Check mixed formats (e.g., "100 units", "50 kg")
+#                 if re.match(r'^\d+(\.\d+)?\s*[a-zA-Z]+$', value):
+#                     format_variations += 1
+#                     continue
+
+#                 # Try numeric conversion
+#                 try:
+#                     float(value)
+#                     value_types.add('number')
+#                 except ValueError:
+#                     pass
+
+#                 # Check for dates with various formats
+#                 try:
+#                     pd.to_datetime(value)
+#                     value_types.add('datetime')
+#                 except:
+#                     value_types.add('text')
+
+#         # Criteria for complex data:
+#         # 1. Multiple basic types present
+#         # 2. Special formats (currency, percentage) present
+#         # 3. Multiple format variations within same type
+#         # 4. Mixed numeric and text data
+#         return (len(value_types) > 1 or 
+#                 'currency' in value_types or 
+#                 'percentage' in value_types or 
+#                 format_variations > 2)
+
+#     except Exception as e:
+#         logger.warning(f"Error checking complex data for {column_name}: {str(e)}")
+#         return False
+
+
 
 
 
@@ -420,6 +728,52 @@ def clean_special_values(df: pd.DataFrame) -> pd.DataFrame:
         logger.error(f"Error in clean_special_values: {str(e)}")
         raise
 
+# given convert function
+# basic data type inference
+# def infer_and_convert_data_types(df):
+#     # buffed up data type inference function
+#     # clean special values first
+#     df = clean_special_values(df)
+#     print(1)
+#     for column in df.columns:
+#         try:
+
+#             df_converted = pd.to_numeric(df[column], errors='coerce')
+#             if not df_converted.isna().all():
+#                 df[column] = df_converted
+#                 continue
+#             print(2)
+
+#             try:
+#                 df[column] = pd.to_datetime(df[column], errors='coerce', format='mixed')
+#                 continue
+#             except (ValueError, TypeError):
+#                 pass
+#             print(3)
+
+#             if len(df[column].unique()) / len(df[column]) < 0.5:
+#                 df[column] = pd.Categorical(df[column])
+#                 continue
+
+#             non_null_values = df[column].dropna().tolist()
+#             if is_complex_data(non_null_values, column):
+#                 inferred_type, confidence = SpacyModelCache.analyze_complex_data(
+#                     non_null_values, column
+#                 )
+#                 if confidence > 0.5:
+#                     if inferred_type == 'datetime':
+#                         df[column] = pd.to_datetime(df[column], errors='coerce')
+#                     elif inferred_type == 'number':
+#                         df[column] = pd.to_numeric(df[column], errors='coerce')
+#                     elif inferred_type == 'category':
+#                         df[column] = pd.Categorical(df[column])
+
+#             print(4)
+#         except Exception as e:
+#             logger.error(f"Error processing column {column}: {str(e)}")
+#             df[column] = df[column].astype(str)
+#         print(5)
+#         return df
 
 
 def infer_and_convert_data_types(df: pd.DataFrame) -> pd.DataFrame:
@@ -546,4 +900,102 @@ def update_column_type(df: pd.DataFrame, column: str, new_type: str) -> pd.DataF
         logger.error(f"Error updating column {column} to type {new_type}: {str(e)}")
         raise
 
+
+
+    #         # get non-null values
+    #         non_null_values = df[column].dropna().tolist()
+    #         if len(non_null_values) == 0:
+    #             df[column] = df[column].astype(str)
+    #             continue
+
+    #         # check if it's complex data
+    #         if is_complex_data(non_null_values, column):
+    #             logger.info(f"Complex data detected in column {column}, using spaCy model")
+    #             inferred_type, confidence = SpacyModelCache.analyze_complex_data(
+    #                 non_null_values, column
+    #             )
+                
+    #             if confidence > 0.5:  # only use model inference if confidence is high enough
+    #                 logger.info(f"Using model inference for {column}: {inferred_type} (confidence: {confidence:.2f})")
+    #                 try:
+    #                     if inferred_type == 'datetime':
+    #                         df[column] = pd.to_datetime(df[column], errors='coerce')
+    #                     elif inferred_type == 'number':
+    #                         df[column] = pd.to_numeric(df[column], errors='coerce')
+    #                     elif inferred_type == 'category':
+    #                         df[column] = pd.Categorical(df[column])
+    #                     continue
+    #                 except Exception as e:
+    #                     logger.warning(f"Failed to convert {column} using model inference: {str(e)}")
+    #             else:
+    #                 logger.info(f"Low confidence ({confidence:.2f}) for {column}, falling back to rule-based inference")
+
+    #         # original rule-based inference logic
+    #         col_lower = column.lower()
+            
+    #         # name-related columns are usually strings
+    #         if any(name in col_lower for name in ['name', 'title', 'label', 'id']):
+    #             df[column] = df[column].astype(str)
+    #             continue
+                
+    #         # date-related columns
+    #         if any(date in col_lower for date in ['date', 'time', 'year', 'month', 'day']):
+    #             try:
+    #                 df[column] = pd.to_datetime(df[column], format='%d/%m/%Y', errors='coerce')
+    #                 continue
+    #             except:
+    #                 pass
+
+    #         # grade columns
+    #         if 'grade' in col_lower:
+    #             unique_values = pd.Series(non_null_values).unique()
+    #             if len(unique_values) <= 5 and all(len(str(x).strip()) <= 2 for x in unique_values):
+    #                 df[column] = pd.Categorical(df[column])
+    #                 continue
+    #             else:
+    #                 df[column] = df[column].astype(str)
+    #                 continue
+
+    #         # boolean columns
+    #         if ('is_' in col_lower or 
+    #             all(str(x).lower() in ['true', 'false', '1', '0', 'yes', 'no', 'y', 'n'] 
+    #                 for x in non_null_values)):
+    #             try:
+    #                 bool_map = {
+    #                     'true': True, 'false': False,
+    #                     '1': True, '0': False,
+    #                     'yes': True, 'no': False,
+    #                     1: True, 0: False
+    #                 }
+    #                 df[column] = df[column].map(bool_map)
+    #                 continue
+    #             except:
+    #                 pass
+
+    #         # numeric columns check
+    #         try:
+    #             if all(str(x).replace('.', '').isdigit() or str(x).lower() in ['nan', 'not available', 'n/a', ''] 
+    #                    for x in non_null_values):
+    #                 if any('.' in str(x) for x in non_null_values):
+    #                     df[column] = pd.to_numeric(df[column], errors='coerce')
+    #                 else:
+    #                     df[column] = pd.to_numeric(df[column], errors='coerce', downcast='integer')
+    #                 continue
+    #         except:
+    #             pass
+
+    #         # categorical columns check
+    #         unique_ratio = len(pd.Series(non_null_values).unique()) / len(non_null_values)
+    #         if unique_ratio < 0.5 and len(pd.Series(non_null_values).unique()) <= 10:
+    #             df[column] = pd.Categorical(df[column])
+    #             continue
+
+    #         # default to string type
+    #         df[column] = df[column].astype(str)
+
+    #     except Exception as e:
+    #         logger.error(f"Error processing column {column}: {str(e)}")
+    #         df[column] = df[column].astype(str)  # default to string type in case of error
+
+    # return df
 

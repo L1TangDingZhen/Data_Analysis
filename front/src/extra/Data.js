@@ -212,20 +212,38 @@ const styles = {
 };
 
 
-const getDisplayType = (type) => {
+const getDisplayType = (type, column, analysis) => {
+  // 直接使用model_inference的类型
+  if (analysis?.inference_info?.[column]?.model_inference) {
+    const modelType = analysis.inference_info[column].model_inference;
+    switch (modelType) {
+      case 'datetime':
+        return 'Date/Time';
+      case 'boolean':
+        return 'Boolean';
+      case 'number':
+        return 'Number';
+      case 'category':
+        return 'Category';
+      case 'text':
+        return 'Text';
+    }
+  }
+
+  // 后备方案：如果没有model_inference，使用原始类型
   const typeMap = {
     'object': 'Text',
-    'float64': 'Number (Float)',
-    'int64': 'Number (Integer)',
+    'float64': 'Number',
+    'float32': 'Number',
+    'int64': 'Number',
+    'int32': 'Number',
+    'uint8': 'Number',
     'datetime64[ns]': 'Date/Time',
     'bool': 'Boolean',
-    'category': 'Category',
-    'text': 'Text',
-    'number': 'Number',
-    'datetime': 'Date/Time',
-    'boolean': 'Boolean'
+    'category': 'Category'
   };
-  return typeMap[type] || type;
+
+  return typeMap[type] || 'Text';
 };
 
 const formatSampleValue = (value) => {
@@ -387,25 +405,18 @@ const FileAnalyzer = () => {
       const updatedData = await response.json();
       setPreviewData(updatedData.preview_data);
       
-      // 更新分析数据中的类型和样本值
-      // update the type and sample value in the analysis data
+      // 更新 analysis 中的类型信息
       setAnalysis(prev => ({
         ...prev,
         types: {
           ...prev.types,
-          [column]: updatedData.new_type
-        },
-        samples: {
-          ...prev.samples,
-          [column]: updatedData.sample_value
+          [column]: newType  // 使用新类型更新
         }
       }));
 
     } catch (err) {
       console.error('Type update error:', err);
       setError('Failed to update column type: ' + err.message);
-      // 恢复原来的类型
-      // revert back to the original type
       setModifiedColumns({
         ...modifiedColumns,
         [column]: analysis.types[column]
@@ -505,7 +516,7 @@ const FileAnalyzer = () => {
                           {Object.entries(analysis.types).map(([column, type]) => (
                             <tr key={column}>
                               <td style={styles.td}>{column}</td>
-                              <td style={styles.td}>{getDisplayType(modifiedColumns[column] || type)}</td>
+                              <td style={styles.td}>{getDisplayType(modifiedColumns[column] || type, column, analysis)}</td>
                               <td style={styles.td}>
                                 <span style={{
                                   ...styles.sampleValue,
@@ -669,7 +680,7 @@ const FileAnalyzer = () => {
                             fontWeight: 'normal',
                             marginTop: '4px'
                           }}>
-                            {getDisplayType(analysis.types[header])}
+                            {getDisplayType(analysis.types[header], header, analysis)}
                           </div>
                         )}
                       </th>
