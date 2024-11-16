@@ -38,6 +38,7 @@ python manage.py runserver
 
 # Move to front-end and run
 cd front
+npm install
 npm start
 
 ```
