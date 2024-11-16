@@ -213,7 +213,7 @@ const styles = {
 
 
 const getDisplayType = (type, column, analysis) => {
-  // 直接使用model_inference的类型
+  // use the model_inference type directly
   if (analysis?.inference_info?.[column]?.model_inference) {
     const modelType = analysis.inference_info[column].model_inference;
     switch (modelType) {
@@ -230,7 +230,7 @@ const getDisplayType = (type, column, analysis) => {
     }
   }
 
-  // 后备方案：如果没有model_inference，使用原始类型
+  // fallback: use the original type if model_inference is not available
   const typeMap = {
     'object': 'Text',
     'float64': 'Number',
@@ -260,30 +260,25 @@ const formatSampleValue = (value) => {
   // deal with numbers
   if (!isNaN(value) && value !== '') {
     const num = parseFloat(value);
-    // 检查是否为整数
     // integer check
     if (Number.isInteger(num)) {
       return num.toString();
     }
-    // 如果是小数，保留两位小数
     // if it's a decimal, round it to 2 decimal places
     return Number(num.toFixed(2)).toString();
   }
 
-  // 处理布尔值
   // handle boolean values
   if (value === 'true' || value === 'false') {
     return value;
   }
 
-  // 处理日期格式\
   // handle date format
   const dateValue = new Date(value);
   if (!isNaN(dateValue) && value.includes('-')) {
     return dateValue.toLocaleDateString();
   }
 
-  // 对于其他所有情况，返回字符串值，并确保去除首尾空格
   // for all other cases, return the string value and ensure leading/trailing spaces are removed
   const strValue = String(value).trim();
   return strValue || 'No data available';
@@ -369,7 +364,7 @@ const FileAnalyzer = () => {
       
       const data = await response.json();
       setAnalysis(data);
-      setPreviewData(data.preview_data); // 假设后端返回了 preview_data // assume backend returns preview_data
+      setPreviewData(data.preview_data);  // assume backend returns preview_data
     } catch (err) {
       console.error('Upload error:', err);
       setError(err.message || 'Failed to analyze file');
@@ -405,12 +400,12 @@ const FileAnalyzer = () => {
       const updatedData = await response.json();
       setPreviewData(updatedData.preview_data);
       
-      // 更新 analysis 中的类型信息
+      // update the type information in analysis
       setAnalysis(prev => ({
         ...prev,
         types: {
           ...prev.types,
-          [column]: newType  // 使用新类型更新
+          [column]: newType // update with the new type
         }
       }));
 

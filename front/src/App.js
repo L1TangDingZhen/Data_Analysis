@@ -8,7 +8,6 @@ function App() {
       <div className="App">
         <header className="App-header">
           <Routes>
-            {/* 将 "/" 路径设置为 Data 组件 */}
             <Route path="/" element={<Data />} />
           </Routes>
         </header>

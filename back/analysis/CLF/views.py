@@ -56,63 +56,13 @@ class AnalyzeFileView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 存储推断信息
+            # store inference information
             inference_info = {}
             types = {}
             
-            # 数据类型推断
+            # data type inference
             logger.info("Starting data type inference")
             df = optimize_dataframe(df)
-            
-            # 对每列进行分析
-            # for column in df.columns:
-            #     try:
-            #         non_null_values = df[column].dropna().tolist()
-            #         if len(non_null_values) > 0:
-            #             is_complex = is_complex_data(non_null_values, column)
-            #             if is_complex:
-            #                 inferred_type, confidence = SpacyModelCache.analyze_complex_data(
-            #                     non_null_values, column
-            #                 )
-            #                 inference_info[column] = {
-            #                     'is_complex': True,
-            #                     'model_inference': inferred_type,
-            #                     'confidence': float(confidence),
-            #                     'used_model': confidence > 0.5
-            #                 }
-            #                 # 如果置信度足够，立即应用类型转换
-            #                 if confidence > 0.5:
-            #                     if inferred_type == 'datetime':
-            #                         df[column] = pd.to_datetime(df[column], errors='coerce')
-            #                     elif inferred_type == 'boolean':
-            #                         bool_map = {
-            #                             '1': True, '0': False,
-            #                             'true': True, 'false': False,
-            #                             'yes': True, 'no': False,
-            #                             1: True, 0: False
-            #                         }
-            #                         df[column] = df[column].astype(str).str.lower().map(bool_map)
-            #                     elif inferred_type == 'category':
-            #                         df[column] = pd.Categorical(df[column])
-            #                     elif inferred_type == 'number':
-            #                         df[column] = pd.to_numeric(df[column], errors='coerce')
-            #             else:
-            #                 inference_info[column] = {
-            #                     'is_complex': False,
-            #                     'used_model': False
-            #                 }
-            #                 # 使用基础推断
-            #                 df = infer_and_convert_data_types(df)
-            #     except Exception as e:
-            #         logger.error(f"Error processing column {column}: {str(e)}")
-            #         inference_info[column] = {
-            #             'is_complex': False,
-            #             'error': str(e)
-            #         }
-                
-            #     # 记录最终类型
-            #     types[column] = str(df[column].dtype)
-
 
 
             for column in df.columns:
@@ -121,7 +71,7 @@ class AnalyzeFileView(APIView):
                     if len(non_null_values) > 0:
                         is_complex = is_complex_data(non_null_values, column)
                         
-                        # 检查特定列名模式
+                        # check for specific column name patterns
                         col_lower = column.lower()
                         if 'grade' in col_lower or 'level' in col_lower:
                             inferred_type = 'category'
@@ -137,7 +87,7 @@ class AnalyzeFileView(APIView):
                                 non_null_values, column
                             )
                         else:
-                            # 基础类型推断
+                            # basic type inference
                             if all(isinstance(v, bool) or str(v).lower() in ['true', 'false', '1', '0'] 
                                 for v in non_null_values):
                                 inferred_type = 'boolean'
@@ -156,7 +106,7 @@ class AnalyzeFileView(APIView):
                             'used_model': confidence > 0.5
                         }
                         
-                        # 应用类型转换
+                        # apply type conversion if confidence is high enough
                         if confidence > 0.5:
                             if inferred_type == 'category':
                                 df[column] = pd.Categorical(df[column])
@@ -175,7 +125,7 @@ class AnalyzeFileView(APIView):
                     
                 types[column] = str(df[column].dtype)
 
-            # 生成文件ID和其他响应数据
+            # generate file ID and other response data
             file_id = generate_file_id()
             save_dataframe(file_id, df)
 
@@ -215,13 +165,13 @@ class UpdateTypeView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 获取数据框
+            # get the dataframe
             df = get_dataframe(file_id)
             original_type = str(df[column].dtype)
             
             logger.info(f"Updating column {column} type from {original_type} to {new_type}")
             
-            # 仅转换指定列的类型
+            # convert type only for the specified column
             try:
                 if new_type == 'category':
                     df[column] = pd.Categorical(df[column])
@@ -240,7 +190,7 @@ class UpdateTypeView(APIView):
                 else:
                     df[column] = df[column].astype(str)
                 
-                # 保存更新后的数据框
+                # save the updated dataframe
                 save_dataframe(file_id, df)
                 
                 logger.info(f"Successfully converted {column} to {new_type}")
@@ -250,7 +200,7 @@ class UpdateTypeView(APIView):
                     'inferred_type': str(df[column].dtype),
                     'display_type': new_type,
                     'sample_value': get_column_sample(df, column),
-                    'new_type': new_type,  # 添加这一行
+                    'new_type': new_type,  
                     'message': f'Successfully updated type of {column} to {new_type}'
                 })
 
