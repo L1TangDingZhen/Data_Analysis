@@ -22,6 +22,7 @@ cd Data_Analysis
 # Start the application using Docker Compose
 docker-compose up --build
 
+
 2. Mannual Running
 
 # Clone the repository
