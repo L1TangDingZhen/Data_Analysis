@@ -378,7 +378,7 @@ const FileAnalyzer = () => {
       ...modifiedColumns,
       [column]: newType
     });
-
+  
     try {
       const response = await fetch('http://127.0.0.1:8000/update-type/', {
         method: 'POST',
@@ -391,24 +391,33 @@ const FileAnalyzer = () => {
           file_id: analysis.file_id
         }),
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to update type');
       }
-
+  
       const updatedData = await response.json();
       setPreviewData(updatedData.preview_data);
       
-      // update the type information in analysis
+      // update the analysis state with the new type
       setAnalysis(prev => ({
         ...prev,
         types: {
           ...prev.types,
-          [column]: newType // update with the new type
+          [column]: newType
+        },
+        inference_info: {
+          ...prev.inference_info,
+          [column]: {
+            ...prev.inference_info[column],
+            model_inference: newType,  // update model_inference
+            confidence: 1.0,  // set high confidence when manually modified
+            used_model: true  // indicate this is a valid type
+          }
         }
       }));
-
+  
     } catch (err) {
       console.error('Type update error:', err);
       setError('Failed to update column type: ' + err.message);
@@ -417,7 +426,7 @@ const FileAnalyzer = () => {
         [column]: analysis.types[column]
       });
     }
-};
+  };
 
   return (
     <div style={styles.container}>
