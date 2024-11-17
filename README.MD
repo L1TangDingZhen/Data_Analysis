@@ -30,6 +30,8 @@ docker-compose up --build
 # Clone the repository
 git clone https://github.com/L1TangDingZhen/Data_Analysis
 
+# Move to Project
+cd Data_Analysis
 
 # Move to back end and run
 cd back/analysis
